@@ -1,0 +1,9 @@
+version: 2
+
+models:
+  - name: dates
+    description: "Date spine generated via generate_series() — serves as the base for the MetricFlow time spine"
+    columns:
+      - name: date_day
+        description: "Calendar date"
+        tests: [unique, not_null]

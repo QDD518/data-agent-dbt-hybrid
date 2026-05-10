@@ -1,0 +1,152 @@
+semantic_models:
+  # ── Core: Orders semantic model ──
+  - name: orders
+    description: >
+      Order transactions — the central fact model. Each row is one order line.
+      Supports revenue, order count, quantity, and customer/product dimensional analysis.
+    model: ref('fact_orders')
+
+    defaults:
+      agg_time_dimension: order_date
+
+    entities:
+      - name: order
+        type: primary
+        expr: order_id
+        description: "Unique order identifier"
+
+      - name: customer
+        type: foreign
+        expr: customer_id
+        description: "Customer who placed the order"
+
+      - name: product
+        type: foreign
+        expr: product_id
+        description: "Product purchased"
+
+    dimensions:
+      # ── Time dimensions ──
+      - name: order_date
+        type: time
+        type_params:
+          time_granularity: day
+        description: "Order date — primary time axis for all metric aggregations"
+
+      - name: order_month
+        type: time
+        type_params:
+          time_granularity: month
+        expr: DATE_TRUNC('month', order_date)
+        description: "Order month (pre-truncated for monthly aggregations)"
+
+      # ── Categorical dimensions (order) ──
+      - name: order_status
+        type: categorical
+        expr: status
+        description: "Order status: Completed, Returned, Cancelled"
+
+      # ── Categorical dimensions (customer — denormalized) ──
+      - name: customer_segment
+        type: categorical
+        expr: customer_segment
+        description: "Customer tier: Premium or Standard"
+
+      - name: customer_region
+        type: categorical
+        expr: customer_region
+        description: "Geographic region: North China, East China, South China, etc."
+
+      - name: customer_city
+        type: categorical
+        expr: city
+        description: "Customer city"
+
+      # ── Categorical dimensions (product — denormalized) ──
+      - name: product_category
+        type: categorical
+        expr: product_category
+        description: "Product top-level category: Electronics"
+
+      - name: product_subcategory
+        type: categorical
+        expr: product_subcategory
+        description: "Product subcategory: Smartphones, Laptops, Audio, etc."
+
+    measures:
+      - name: revenue
+        description: "Total net revenue (net_amount, i.e., after discount). The primary revenue metric."
+        agg: sum
+        expr: net_amount
+
+      - name: gross_revenue
+        description: "Total gross revenue before discounts"
+        agg: sum
+        expr: gross_amount
+
+      - name: order_count
+        description: "Number of distinct orders placed"
+        agg: count_distinct
+        expr: order_id
+
+      - name: total_quantity
+        description: "Total units sold"
+        agg: sum
+        expr: quantity
+
+      - name: avg_order_value
+        description: "Average order value (net amount per order, also known as AOV)"
+        agg: average
+        expr: net_amount
+
+      - name: avg_discount
+        description: "Average discount percentage across orders"
+        agg: average
+        expr: discount_pct
+
+      - name: unique_customers
+        description: "Count of distinct customers who placed orders"
+        agg: count_distinct
+        expr: customer_id
+
+  # ── Customers semantic model ──
+  - name: customers
+    description: "Customer profiles for cohort and demographic analysis"
+    model: ref('dim_customers')
+
+    defaults:
+      agg_time_dimension: registered_date
+
+    entities:
+      - name: customer
+        type: primary
+        expr: customer_id
+        description: "Unique customer identifier"
+
+    dimensions:
+      - name: registered_date
+        type: time
+        type_params:
+          time_granularity: day
+        description: "Customer registration date"
+
+      - name: customer_segment
+        type: categorical
+        expr: segment
+        description: "Customer segment"
+
+      - name: customer_region
+        type: categorical
+        expr: region
+        description: "Customer region"
+
+      - name: customer_city
+        type: categorical
+        expr: city
+        description: "Customer city"
+
+    measures:
+      - name: total_customers
+        description: "Total number of registered customers"
+        agg: count_distinct
+        expr: customer_id

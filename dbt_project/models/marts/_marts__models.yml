@@ -1,0 +1,93 @@
+version: 2
+
+models:
+  - name: fact_orders
+    description: "Core fact table: one row per order line, joined with customer and product dimensions. The central table for all analytical queries."
+    columns:
+      - name: order_id
+        description: "Primary key: unique order identifier"
+        tests: [unique, not_null]
+      - name: order_date
+        description: "Order date — the primary time dimension for analysis"
+      - name: status
+        description: "Order status"
+      - name: quantity
+        description: "Units purchased"
+      - name: unit_price
+        description: "Selling price per unit (CNY)"
+      - name: discount_pct
+        description: "Discount percentage"
+      - name: gross_amount
+        description: "Gross amount before discount (CNY)"
+      - name: net_amount
+        description: "Net amount after discount (CNY) — use this for revenue calculations"
+      - name: customer_id
+        description: "Foreign key to dim_customers"
+      - name: customer_name
+        description: "Customer full name"
+      - name: city
+        description: "Customer city"
+      - name: customer_region
+        description: "Customer geographic region"
+      - name: customer_country
+        description: "Customer country"
+      - name: customer_segment
+        description: "Customer tier (Premium / Standard)"
+      - name: customer_registered_date
+        description: "Date customer registered"
+      - name: product_id
+        description: "Foreign key to dim_products"
+      - name: product_name
+        description: "Product display name"
+      - name: product_category
+        description: "Product category"
+      - name: product_subcategory
+        description: "Product subcategory"
+      - name: product_cost_price
+        description: "Product cost price (CNY)"
+      - name: product_list_price
+        description: "Product list price (CNY)"
+      - name: product_margin
+        description: "Product unit margin (CNY)"
+      - name: product_margin_pct
+        description: "Product margin percentage"
+
+  - name: dim_customers
+    description: "Customer dimension table"
+    columns:
+      - name: customer_id
+        description: "Primary key"
+        tests: [unique, not_null]
+      - name: customer_name
+        description: "Customer full name"
+      - name: city
+        description: "City"
+      - name: region
+        description: "Geographic region"
+      - name: country
+        description: "Country"
+      - name: registered_date
+        description: "Registration date"
+      - name: segment
+        description: "Customer segment (Premium / Standard)"
+
+  - name: dim_products
+    description: "Product dimension table"
+    columns:
+      - name: product_id
+        description: "Primary key"
+        tests: [unique, not_null]
+      - name: product_name
+        description: "Product name"
+      - name: category
+        description: "Product category"
+      - name: subcategory
+        description: "Product subcategory"
+      - name: cost_price
+        description: "Cost price (CNY)"
+      - name: list_price
+        description: "List price (CNY)"
+      - name: margin
+        description: "Unit margin (CNY)"
+      - name: margin_pct
+        description: "Margin percentage"

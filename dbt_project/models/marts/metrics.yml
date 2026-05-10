@@ -1,0 +1,112 @@
+metrics:
+  # ── Revenue Metrics ──
+  - name: total_revenue
+    description: "Total net revenue across all orders (after discounts). The primary revenue KPI."
+    label: "Total Revenue"
+    type: simple
+    type_params:
+      measure: revenue
+    filter: |
+      status = 'Completed'
+
+  - name: gross_revenue
+    description: "Total gross revenue before discounts"
+    label: "Gross Revenue"
+    type: simple
+    type_params:
+      measure: gross_revenue
+    filter: |
+      status = 'Completed'
+
+  - name: daily_revenue
+    description: "Daily revenue over time — use for trend charts"
+    label: "Daily Revenue"
+    type: simple
+    type_params:
+      measure: revenue
+    filter: |
+      status = 'Completed'
+    time_granularity: day
+
+  - name: weekly_revenue
+    description: "Weekly revenue over time"
+    label: "Weekly Revenue"
+    type: simple
+    type_params:
+      measure: revenue
+    filter: |
+      status = 'Completed'
+    time_granularity: week
+
+  - name: monthly_revenue
+    description: "Monthly revenue — use for month-over-month comparison"
+    label: "Monthly Revenue"
+    type: simple
+    type_params:
+      measure: revenue
+    filter: |
+      status = 'Completed'
+    time_granularity: month
+
+  # ── Order Metrics ──
+  - name: total_orders
+    description: "Total number of distinct orders"
+    label: "Order Count"
+    type: simple
+    type_params:
+      measure: order_count
+    filter: |
+      status = 'Completed'
+
+  - name: daily_orders
+    description: "Daily order count"
+    label: "Daily Orders"
+    type: simple
+    type_params:
+      measure: order_count
+    filter: |
+      status = 'Completed'
+    time_granularity: day
+
+  # ── Customer Metrics ──
+  - name: customer_count
+    description: "Number of distinct customers who placed orders"
+    label: "Active Customers"
+    type: simple
+    type_params:
+      measure: unique_customers
+
+  - name: total_customers
+    description: "Total number of registered customers"
+    label: "Registered Customers"
+    type: simple
+    type_params:
+      measure: total_customers
+
+  # ── KPI Metrics ──
+  - name: avg_order_value
+    description: "Average order value (AOV) — total revenue / number of orders"
+    label: "AOV"
+    type: simple
+    type_params:
+      measure: avg_order_value
+    filter: |
+      status = 'Completed'
+
+  - name: avg_discount_rate
+    description: "Average discount percentage across orders"
+    label: "Avg Discount %"
+    type: simple
+    type_params:
+      measure: avg_discount
+    filter: |
+      status = 'Completed'
+
+  - name: total_units_sold
+    description: "Total quantity of units sold"
+    label: "Units Sold"
+    type: simple
+    type_params:
+      measure: total_quantity
+    filter: |
+      status = 'Completed'

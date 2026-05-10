@@ -1,0 +1,73 @@
+version: 2
+
+models:
+  - name: stg_orders
+    description: "Cleaned order records with computed financial amounts"
+    columns:
+      - name: order_id
+        description: "Unique order identifier"
+        tests: [unique, not_null]
+      - name: customer_id
+        description: "Foreign key to customers table"
+        tests: [not_null]
+      - name: product_id
+        description: "Foreign key to products table"
+        tests: [not_null]
+      - name: order_date
+        description: "Date when the order was placed"
+      - name: status
+        description: "Order status: Completed, Returned, Cancelled"
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['Completed', 'Returned', 'Cancelled']
+      - name: quantity
+        description: "Number of units purchased"
+      - name: unit_price
+        description: "Selling price per unit at time of order (CNY)"
+      - name: discount_pct
+        description: "Discount percentage applied (0-100)"
+      - name: gross_amount
+        description: "Gross order amount before discount (quantity * unit_price)"
+      - name: net_amount
+        description: "Net order amount after discount (gross_amount * (1 - discount_pct/100))"
+
+  - name: stg_customers
+    description: "Customer profiles with segmentation info"
+    columns:
+      - name: customer_id
+        description: "Unique customer identifier"
+        tests: [unique, not_null]
+      - name: customer_name
+        description: "Customer full name"
+      - name: city
+        description: "Customer city"
+      - name: region
+        description: "Geographic region within country"
+      - name: country
+        description: "Country code (CN = China)"
+      - name: registered_date
+        description: "Date the customer registered"
+      - name: segment
+        description: "Customer tier: Premium or Standard"
+
+  - name: stg_products
+    description: "Product catalog with computed margins"
+    columns:
+      - name: product_id
+        description: "Unique product identifier"
+        tests: [unique, not_null]
+      - name: product_name
+        description: "Product display name"
+      - name: category
+        description: "Top-level product category"
+      - name: subcategory
+        description: "Product subcategory"
+      - name: cost_price
+        description: "Procurement cost per unit (CNY)"
+      - name: list_price
+        description: "Standard list price (CNY)"
+      - name: margin
+        description: "Unit profit margin (list_price - cost_price)"
+      - name: margin_pct
+        description: "Margin as percentage of list price"

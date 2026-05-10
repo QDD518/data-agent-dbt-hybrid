@@ -1,0 +1,9 @@
+version: 2
+
+models:
+  - name: metricflow_time_spine
+    description: "MetricFlow time spine — a table with one row per day, required for time-based metric aggregation"
+    columns:
+      - name: date_day
+        description: "Calendar date at day granularity"
+        tests: [unique, not_null]

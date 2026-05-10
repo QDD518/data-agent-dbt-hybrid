@@ -1,0 +1,37 @@
+# Python
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Claude
+.claude/
+
+# Environment
+.env
+.venv
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# dbt
+dbt_project/logs/
+dbt_project/target/
+dbt_project/dbt_packages/
+
+# ChromaDB
+chroma_db/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Docker
+postgres_data/

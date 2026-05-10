@@ -1,0 +1,57 @@
+name: 'chatbi_ecommerce'
+version: '1.0.0'
+config-version: 2
+
+profile: 'chatbi_ecommerce'
+
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+seeds:
+  chatbi_ecommerce:
+    +schema: raw
+    raw_orders:
+      +column_types:
+        order_id: integer
+        customer_id: integer
+        product_id: integer
+        order_date: date
+        status: varchar(20)
+        quantity: integer
+        unit_price: numeric(10,2)
+        discount_pct: numeric(5,2)
+    raw_customers:
+      +column_types:
+        customer_id: integer
+        name: varchar(100)
+        email: varchar(100)
+        city: varchar(50)
+        region: varchar(30)
+        country: varchar(30)
+        registered_date: date
+        segment: varchar(20)
+    raw_products:
+      +column_types:
+        product_id: integer
+        product_name: varchar(100)
+        category: varchar(50)
+        subcategory: varchar(50)
+        cost_price: numeric(10,2)
+        list_price: numeric(10,2)
+
+models:
+  chatbi_ecommerce:
+    staging:
+      +materialized: view
+      +schema: staging
+    marts:
+      +materialized: table
+      +schema: analytics

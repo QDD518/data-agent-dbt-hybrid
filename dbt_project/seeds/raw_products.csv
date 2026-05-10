@@ -1,0 +1,21 @@
+product_id,product_name,category,subcategory,cost_price,list_price
+1,iPhone 15 Pro,Electronics,Smartphones,650.00,999.00
+2,Samsung Galaxy S24,Electronics,Smartphones,580.00,899.00
+3,Google Pixel 8,Electronics,Smartphones,450.00,699.00
+4,MacBook Air M3,Electronics,Laptops,850.00,1299.00
+5,Dell XPS 15,Electronics,Laptops,780.00,1199.00
+6,ThinkPad X1 Carbon,Electronics,Laptops,720.00,1099.00
+7,AirPods Pro 2,Electronics,Audio,120.00,249.00
+8,Sony WH-1000XM5,Electronics,Audio,180.00,349.00
+9,iPad Air,Electronics,Tablets,350.00,599.00
+10,Samsung Galaxy Tab S9,Electronics,Tablets,320.00,549.00
+11,Apple Watch Ultra,Electronics,Wearables,400.00,799.00
+12,Garmin Fenix 7,Electronics,Wearables,350.00,699.00
+13,USB-C Hub 7-in-1,Electronics,Accessories,15.00,39.99
+14,Mechanical Keyboard RGB,Electronics,Accessories,25.00,59.99
+15,4K Monitor 27-inch,Electronics,Monitors,280.00,449.00
+16,LG UltraWide 34-inch,Electronics,Monitors,350.00,599.00
+17,Wireless Mouse Pro,Electronics,Accessories,18.00,49.99
+18,Thunderbolt 4 Cable,Electronics,Accessories,8.00,24.99
+19,Samsung T7 SSD 2TB,Electronics,Storage,95.00,179.99
+20,WD Black NVMe 1TB,Electronics,Storage,65.00,129.99

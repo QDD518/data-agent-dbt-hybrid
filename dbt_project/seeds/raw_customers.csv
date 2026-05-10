@@ -1,0 +1,13 @@
+customer_id,name,email,city,region,country,registered_date,segment
+1,Alice Wang,alice.wang@email.com,Beijing,North China,CN,2025-01-15,Premium
+2,Bob Li,bob.li@email.com,Shanghai,East China,CN,2025-02-20,Standard
+3,Carol Zhang,carol.zhang@email.com,Shenzhen,South China,CN,2025-03-10,Premium
+4,David Chen,david.chen@email.com,Hangzhou,East China,CN,2025-01-28,Standard
+5,Emma Liu,emma.liu@email.com,Chengdu,West China,CN,2025-04-05,Premium
+6,Frank Xu,frank.xu@email.com,Guangzhou,South China,CN,2025-02-14,Standard
+7,Grace Wu,grace.wu@email.com,Nanjing,East China,CN,2025-03-22,Standard
+8,Henry Yang,henry.yang@email.com,Wuhan,Central China,CN,2025-04-18,Standard
+9,Iris Zhou,iris.zhou@email.com,Xi'an,West China,CN,2025-05-01,Premium
+10,Jack Sun,jack.sun@email.com,Tianjin,North China,CN,2025-05-10,Standard
+11,Kate Huang,kate.huang@email.com,Chongqing,West China,CN,2025-01-08,Premium
+12,Leo Ma,leo.ma@email.com,Dalian,Northeast China,CN,2025-03-15,Standard
