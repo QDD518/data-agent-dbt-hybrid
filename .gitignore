@@ -12,6 +12,7 @@ build/
 
 # Project planning (not part of source)
 PHASE2_PLAN.md
+EXECUTION_GUIDE.md
 
 # Environment
 .env
