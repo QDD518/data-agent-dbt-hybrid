@@ -10,6 +10,9 @@ build/
 # Claude
 .claude/
 
+# Project planning (not part of source)
+PHASE2_PLAN.md
+
 # Environment
 .env
 .venv

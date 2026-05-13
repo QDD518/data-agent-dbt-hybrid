@@ -1,0 +1,58 @@
+import logging
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from backend.config import settings
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: pre-load metadata
+    logger.info("Loading dbt metadata...")
+    from backend.metadata.parser import load_metadata
+    load_metadata()
+    logger.info("Metadata loaded (%d models).", len(load_metadata().models))
+
+    # ChromaDB indexing is lazy — triggered on first RAG query
+    logger.info("Server ready. ChromaDB will index on first retrieval.")
+
+    yield
+    logger.info("Shutting down.")
+
+
+app = FastAPI(
+    title="DataAgent-ChatBI",
+    description="Chat BI powered by dbt Semantic Layer + Text-to-SQL + RAG",
+    version="0.1.0",
+    lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+from backend.api.health import router as health_router
+from backend.api.chat import router as chat_router
+
+app.include_router(health_router)
+app.include_router(chat_router)
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(
+        "backend.main:app",
+        host=settings.app_host,
+        port=settings.app_port,
+        reload=True,
+    )
