@@ -29,11 +29,11 @@ def chat(messages: list[dict], model: str | None = None, temperature: float = 0.
     return response.choices[0].message.content or ""
 
 
-def get_embeddings(texts: list[str], model: str = "text-embedding-3-small") -> list[list[float]]:
+def get_embeddings(texts: list[str], model: str | None = None) -> list[list[float]]:
     """Get embeddings for a list of texts."""
     client = get_client()
     response = client.embeddings.create(
-        model=model,
+        model=model or settings.llm_embedding_model,
         input=texts,
     )
     return [d.embedding for d in response.data]

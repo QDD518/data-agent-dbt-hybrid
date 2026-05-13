@@ -18,8 +18,8 @@ async def lifespan(app: FastAPI):
     load_metadata()
     logger.info("Metadata loaded (%d models).", len(load_metadata().models))
 
-    # ChromaDB indexing is lazy — triggered on first RAG query
-    logger.info("Server ready. ChromaDB will index on first retrieval.")
+    # RAG uses keyword-based retrieval (no embedding API dependency)
+    logger.info("Server ready.")
 
     yield
     logger.info("Shutting down.")

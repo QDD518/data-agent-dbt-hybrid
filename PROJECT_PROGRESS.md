@@ -6,12 +6,46 @@
 |-------|------|--------|-------|-----|
 | **Phase 1** | Environment + dbt Semantic Layer | ✅ Complete | 2026-05-10 | 2026-05-10 |
 | **Phase 2** | Backend Core (3 paths + orchestration) | ✅ Complete | 2026-05-12 | 2026-05-13 |
-| Phase 3 | Frontend (Chat UI + Charts) | ⬜ Pending | — | — |
+| **Phase 3** | Frontend (Chat UI + Charts) | ✅ Complete | 2026-05-13 | 2026-05-13 |
 | Phase 4 | Testing + Docs + Docker + Release | ⬜ Pending | — | — |
 
 ---
 
-## Phase 1: Environment + dbt Semantic Layer ✅
+## Phase 3: Frontend (Chat UI + Charts) ✅
+
+**Completed**: 2026-05-13
+
+### Deliverables (7 Python files)
+- [x] `frontend/app.py` — Streamlit entry, sidebar with sample questions
+- [x] `frontend/utils/api.py` — SSE consumer via httpx streaming
+- [x] `frontend/components/chat.py` — Message rendering: user bubble, assistant with SQL/results/summary
+- [x] `frontend/components/chart.py` — pyecharts rendering (bar/line/pie)
+- [x] Session state for message history
+- [x] Intent classification display
+- [x] SQL code block with syntax highlighting
+
+### UI Layout
+- **Sidebar**: architecture explanation, sample questions (5 presets covering all 3 paths)
+- **Main area**: chat bubbles with rich assistant responses
+  - Collapsible intent classification
+  - Expandable SQL block
+  - Data table (st.dataframe)
+  - Chart (pyecharts HTML via st.components.v1.html)
+  - NL summary + insight
+
+### Startup
+```bash
+# Terminal 1: Backend
+source venv/Scripts/activate && python -m backend.main
+
+# Terminal 2: Frontend
+source venv/Scripts/activate && streamlit run frontend/app.py
+```
+
+### Known Limitations
+- Streamlit is re-run based — SSE events are collected and rendered all at once (not token-by-token streaming). The backend streams on the wire, but the UI renders the complete response.
+- Requires backend running on localhost:8000.
+- Charts use pyecharts + st.components.v1.html (iframe-based). ✅
 
 **Completed**: 2026-05-10
 

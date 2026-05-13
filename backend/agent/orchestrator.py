@@ -23,7 +23,7 @@ async def process_message(message: str) -> AsyncGenerator[str, None]:
     # ── Phase 1: Intent Classification ──
     yield _sse("status", {"stage": "classifying", "message": "Analyzing your question..."})
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     intent = await loop.run_in_executor(None, classify_intent, message)
     path = intent.get("path", "exploratory")
     yield _sse("status", {"stage": "classified", "path": path, "intent": intent})
@@ -49,7 +49,7 @@ async def _handle_path_a(intent: dict) -> AsyncGenerator[str, None]:
     """Path A: MetricFlow-style deterministic SQL from semantic metadata."""
     yield _sse("status", {"stage": "building_sql", "message": "Building metric query..."})
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
 
     query = SemanticQuery(
         metric_names=intent.get("metric_names", []),
@@ -99,7 +99,7 @@ async def _handle_path_b(message: str) -> AsyncGenerator[str, None]:
     """Path B: LLM Text-to-SQL for exploratory queries."""
     yield _sse("status", {"stage": "retrieving_context", "message": "Searching relevant data models..."})
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
 
     # Retrieve relevant context
     context_docs = await loop.run_in_executor(None, retrieve_context, message, 5)
@@ -144,7 +144,7 @@ async def _handle_path_c(message: str) -> AsyncGenerator[str, None]:
     """Path C: RAG-based metadata Q&A — direct answer, no SQL."""
     yield _sse("status", {"stage": "retrieving_docs", "message": "Searching documentation..."})
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     context_docs = await loop.run_in_executor(None, retrieve_context, message, 5)
     context = "\n".join(f"- {doc}" for doc in context_docs)
 
@@ -194,7 +194,7 @@ async def _interpret_results(message: str, result) -> dict:
     if result.row_count == 0:
         return {"summary": "查询未返回任何结果。", "chart_type": "table", "insight": ""}
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
 
     # Preview first 10 rows max
     rows_preview = "\n".join(

@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     openai_api_key: str = "sk-your-key-here"
     openai_base_url: str = "https://api.openai.com/v1"
     llm_model: str = "gpt-4o"
+    llm_embedding_model: str = "text-embedding-3-small"
 
     # PostgreSQL
     postgres_host: str = "localhost"

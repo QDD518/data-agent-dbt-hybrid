@@ -1,4 +1,6 @@
 import time
+from decimal import Decimal
+from datetime import date, datetime
 from typing import Any
 
 from sqlalchemy import create_engine, text
@@ -7,6 +9,15 @@ from sqlalchemy.pool import QueuePool
 
 from backend.config import settings
 from backend.sql.security import validate_sql, SQLSecurityError
+
+
+def _serialize(value: Any) -> Any:
+    """Convert DB types to JSON-serializable Python types."""
+    if isinstance(value, Decimal):
+        return float(value)
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    return value
 
 
 _engine: Engine | None = None
@@ -56,7 +67,7 @@ def execute_sql(sql: str) -> QueryResult:
 
         qr = QueryResult()
         qr.columns = list(result.keys())
-        qr.rows = [list(row) for row in result.fetchall()]
+        qr.rows = [[_serialize(v) for v in row] for row in result.fetchall()]
         qr.row_count = len(qr.rows)
         qr.truncated = qr.row_count >= settings.max_result_rows
         qr.elapsed_ms = (time.perf_counter() - start) * 1000
