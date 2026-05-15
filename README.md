@@ -1,8 +1,10 @@
-# DataAgent-ChatBI
+# Data Agent — dbt Hybrid
 
-**Open-source Chat BI agent powered by dbt Semantic Layer + LLM Text-to-SQL + RAG.**
+**基于 dbt Semantic Layer + LLM Text-to-SQL + RAG 的开源 Chat BI 智能体。三路径混合架构（指标查询 / Text-to-SQL / 元数据问答），确定性 + 灵活性兼得。**
 
-Ask business questions in natural language — the system routes each question through one of three specialized paths and returns SQL, data tables, charts, and NL summaries. Built on dbt + PostgreSQL + DeepSeek (or any OpenAI-compatible LLM).
+用自然语言提问 — 系统将每个问题路由到三条专用路径之一，返回 SQL、数据表格、图表和自然语言摘要。基于 dbt + PostgreSQL + DeepSeek（或任何 OpenAI 兼容的 LLM）。
+
+> [English Version →](README_EN.md)
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/)
 [![dbt 1.11+](https://img.shields.io/badge/dbt-1.11+-orange.svg)](https://docs.getdbt.com/)
@@ -12,53 +14,52 @@ Ask business questions in natural language — the system routes each question t
 
 ---
 
-## Architecture: Why a Hybrid Router?
+## 架构：为什么需要混合路由？
 
-Pure Text-to-SQL is **fragile**. LLMs hallucinate column names, fabricate aggregation logic, and fail silently on structured business metrics. A pure semantic layer (MetricFlow) is **rigid** — it can't handle ad-hoc exploratory questions.
+纯 Text-to-SQL **很脆弱**：LLM 会幻觉列名、凭空捏造聚合逻辑、在结构化业务指标上静默失败。纯语义层（MetricFlow）又**太死板**：无法处理灵活探索性问题。
 
-DataAgent-ChatBI uses a **three-path hybrid architecture** that gets the best of both worlds:
+DataAgent-ChatBI 采用 **三路径混合架构**，取两者之长：
 
 ```
-User Question
+用户自然语言提问
     │
     ▼
 ┌──────────────────┐
-│  Intent Router    │  LLM classifier → metric_query / exploratory / metadata
+│  意图路由器       │  LLM 分类 → metric_query / exploratory / metadata
 └──────┬───────┬───┘
        │       │
        ▼       ▼       ▼
    ┌──────┐ ┌──────┐ ┌──────┐
-   │Path A│ │Path B│ │Path C│
-   │Metric│ │Text- │ │ Meta │
-   │Query │ │to-SQL│ │ Q&A  │
+   │路径 A│ │路径 B│ │路径 C│
+   │指标  │ │Text- │ │元数据│
+   │查询  │ │to-SQL│ │问答  │
    └──┬───┘ └──┬───┘ └──┬───┘
       │        │        │
       ▼        ▼        ▼
- Deterministic  LLM + RAG   RAG + LLM
- SQL from      generates    direct
- semantic      ad-hoc SQL   answer
- metadata
+ 从语义元数据   LLM + RAG   RAG + LLM
+ 确定性生成     生成灵活     直接回答
+ SQL           ad-hoc SQL
       │        │        │
       └────────┼────────┘
                ▼
       ┌──────────────┐
-      │  SQL Executor │  Read-only, row-limited, timeout-protected
+      │  SQL 执行器   │  只读、行数限制、超时保护
       └──────┬───────┘
              ▼
       ┌──────────────┐
-      │ NL Interpreter│  LLM summary + chart recommendation
+      │  NL 解释器    │  LLM 摘要 + 图表推荐
       └──────┬───────┘
              ▼
       ┌──────────────┐
-      │  SSE Stream   │  Real-time progress events to frontend
+      │  SSE 流式推送 │  实时进度事件推送到前端
       └──────────────┘
 ```
 
-### Path A — Metric Query (Deterministic SQL)
+### 路径 A — 指标查询（确定性 SQL）
 
-When the user asks "上月营收是多少？" or "按城市分组的订单量", the Intent Router extracts metric names and dimensions. The system parses `semantic_manifest.json` (dbt Semantic Layer metadata) and **deterministically generates SQL** — no LLM involved in SQL generation.
+当用户问"上月营收是多少？"或"按城市分组的订单量"时，意图路由器提取指标名和维度。系统解析 `semantic_manifest.json`（dbt 语义层元数据）并**确定性地生成 SQL** — 此路径不涉及 LLM，零幻觉。
 
-**Key insight — Last-Mile Aggregation**: dbt models handle all the complex joins (our `fact_orders` is a 43-column OBT wide table). The semantic layer only does:
+**核心设计 — 最后一公里聚合**：dbt 模型负责所有复杂 JOIN（我们的 `fact_orders` 是一张 43 列的 OBT 宽表）。语义层只做最简单的事：
 
 ```sql
 SELECT SUM(net_amount) AS total_revenue, DATE_TRUNC('month', order_date) AS month
@@ -68,180 +69,180 @@ GROUP BY month
 ORDER BY 1 DESC
 ```
 
-This guarantees **zero hallucination** for metric queries. Same logic as MetricFlow, but implemented in pure Python from the dbt-generated metadata.
+与 MetricFlow 同等逻辑，但从 dbt 生成的元数据中以纯 Python 实现，无需 MetricFlow 包依赖。
 
-### Path B — Exploratory Text-to-SQL
+### 路径 B — 探索性 Text-to-SQL
 
-For ad-hoc questions that don't match predefined metrics ("哪个城市的客户平均客单价最高？"), the LLM generates SQL with RAG context from dbt metadata. The keyword-based retriever finds the most relevant tables and columns, providing ground-truth schema context to the LLM.
+对于不匹配预定义指标的灵活提问（"哪个城市的客户平均客单价最高？"），LLM 结合 dbt 元数据的 RAG 上下文生成 SQL。基于关键词的检索器找到最相关的表和列，为 LLM 提供真实的 Schema 上下文。
 
-### Path C — Metadata Q&A
+### 路径 C — 元数据问答
 
-"revenue 是怎么计算的？" → RAG retrieves the relevant dbt docs (model descriptions, column tests, metric definitions) and the LLM answers directly — no SQL execution needed.
+"revenue 是怎么计算的？"→ RAG 检索相关 dbt 文档（模型描述、列测试、指标定义），LLM 直接回答 — 无需执行 SQL。
 
-### Intent Router
+### 意图路由器
 
-A lightweight LLM prompt classifies each question into one of the three paths и extracts structured parameters (metric names, dimensions, time ranges). This means the system **adapts its strategy** per question rather than using one-size-fits-all Text-to-SQL.
-
----
-
-## Why dbt Semantic Layer, Not MetricFlow?
-
-dbt's Semantic Layer (`.yml` definitions + `semantic_manifest.json`) gives us structured metric metadata that the Path A engine parses to build deterministic SQL. This is the same principle as MetricFlow, but:
-
-- **No pip dependency conflicts** — MetricFlow's package is dead (requires `click<8.3`, dbt-core 1.11 requires `click>=8.3`)
-- **No dbt Cloud required** — dbt OSS only defines/validates semantic models; the query engine is a Cloud paid feature. Our custom SQL builder fills this gap
-- **Simpler architecture** — last-mile aggregation means semantic SQL has no joins, just `SELECT agg FROM table GROUP BY dim WHERE filter`
-
-The dbt project generates `semantic_manifest.json` via `dbt parse`, and our `MetricQueryBuilder` parses it at runtime.
+一个轻量级 LLM prompt，将每个问题分类到三条路径之一，并提取结构化参数（指标名、维度、时间范围）。系统**针对每个问题自适应选择策略**，而非一刀切地使用 Text-to-SQL。
 
 ---
 
-## Features
+## 为什么用 dbt Semantic Layer 而不是 MetricFlow？
 
-| Feature | Detail |
-|---------|--------|
-| **3-path hybrid router** | Metric query / Text-to-SQL / Metadata QA |
-| **SSE streaming** | Real-time progress: classifying → building SQL → executing → interpreting |
-| **Deterministic metric SQL** | Zero hallucination for metric queries (parses `semantic_manifest.json`) |
-| **LLM Text-to-SQL + RAG** | Ad-hoc queries grounded in dbt metadata schema context |
-| **SQL security** | Keyword blocklist, SELECT-only, multi-statement prevention, row limits |
-| **Auto-serialization** | Decimal → float, datetime → ISO string for JSON-safe output |
-| **CJK-aware RAG** | Chinese character bigram tokenizer for keyword retrieval (no embedding API needed) |
-| **LLM result interpretation** | NL summary + chart type recommendation (bar/line/pie/table) |
-| **Vendor-agnostic LLM** | Works with DeepSeek, OpenAI, or any OpenAI-compatible API |
+dbt 语义层（`.yml` 定义 + `semantic_manifest.json`）提供了结构化的指标元数据，路径 A 引擎解析元数据构建确定性 SQL。这与 MetricFlow 原理相同，但：
+
+- **无 pip 依赖冲突** — MetricFlow 的 PyPI 包已死（要求 `click<8.3`，而 dbt-core 1.11 要求 `click>=8.3`）
+- **无需 dbt Cloud** — dbt 开源版只能定义/校验语义模型；查询引擎是 Cloud 付费功能。我们的自定义 SQL Builder 填补了这个开源空白
+- **架构更简单** — 最后一公里聚合意味着语义 SQL 无需 JOIN，只是 `SELECT agg FROM table GROUP BY dim WHERE filter`
+
+dbt 项目通过 `dbt parse` 生成 `semantic_manifest.json`，`MetricQueryBuilder` 在运行时解析它。
 
 ---
 
-## Project Structure
+## 功能特性
+
+| 特性 | 说明 |
+|------|------|
+| **三路径混合路由** | 指标查询 / Text-to-SQL / 元数据问答 |
+| **SSE 流式推送** | 实时进度：分类中 → 构建 SQL → 执行中 → 解释中 |
+| **确定性指标 SQL** | 指标查询零幻觉（解析 `semantic_manifest.json` 生成） |
+| **LLM Text-to-SQL + RAG** | 探索性查询基于 dbt 元数据 Schema 上下文 |
+| **SQL 安全层** | 关键词黑名单、仅允许 SELECT、防多语句、行数限制 |
+| **自动序列化** | Decimal → float、datetime → ISO 字符串，确保 JSON 兼容 |
+| **中文分词 RAG** | CJK 字符二元分词 + 拉丁词分词的关键词检索（无需 Embedding API） |
+| **LLM 结果解释** | 自然语言摘要 + 图表类型推荐（柱状图/折线图/饼图/表格） |
+| **LLM 厂商无关** | 兼容 DeepSeek、OpenAI 或任何 OpenAI 兼容 API |
+
+---
+
+## 项目结构
 
 ```
-├── dbt_project/              # dbt project (star schema + semantic layer)
+├── dbt_project/              # dbt 项目（星型模型 + 语义层）
 │   ├── models/
 │   │   ├── staging/          # stg_orders, stg_customers, stg_products, dates
-│   │   └── marts/            # fact_orders (OBT, 43 cols), dim_customers, dim_products
-│   ├── seeds/                # raw_orders.csv (95 rows), raw_customers.csv, raw_products.csv
-│   └── semantic manifest →   # 2 semantic models, 12 metrics, 15+ dimensions
+│   │   └── marts/            # fact_orders (OBT宽表, 43列), dim_customers, dim_products
+│   ├── seeds/                # raw_orders.csv (95行), raw_customers.csv, raw_products.csv
+│   └── 语义层 →              # 2 个语义模型, 12 个指标, 15+ 个维度
 │       semantic_manifest.json
 │
-├── backend/                  # FastAPI (Python 3.12)
+├── backend/                  # FastAPI 后端 (Python 3.12)
 │   ├── agent/
-│   │   ├── router.py         # Intent classifier (LLM)
-│   │   └── orchestrator.py   # 3-path dispatcher + SSE emitter + result interpreter
+│   │   ├── router.py         # 意图分类器 (LLM)
+│   │   └── orchestrator.py   # 三路径调度 + SSE 事件推送 + 结果解释
 │   ├── semantic/
-│   │   └── query_builder.py  # Path A: deterministic SQL from semantic_manifest.json
+│   │   └── query_builder.py  # 路径 A: 从 semantic_manifest.json 确定性生成 SQL
 │   ├── sql/
-│   │   ├── security.py       # SQL validator (SELECT-only, keyword blocklist)
-│   │   ├── generator.py      # Path B: LLM Text-to-SQL
-│   │   └── executor.py       # SQLAlchemy read-only executor + serialization
+│   │   ├── security.py       # SQL 校验器 (仅允许 SELECT, 关键词黑名单)
+│   │   ├── generator.py      # 路径 B: LLM Text-to-SQL
+│   │   └── executor.py       # SQLAlchemy 只读执行器 + 序列化
 │   ├── rag/
-│   │   └── retriever.py      # Keyword retriever (CJK bigram + Latin tokenizer)
+│   │   └── retriever.py      # 关键词检索器 (CJK 二元分词 + 拉丁词分词)
 │   ├── metadata/
-│   │   └── parser.py         # dbt manifest.json + semantic_manifest.json parser
+│   │   └── parser.py         # dbt manifest.json + semantic_manifest.json 解析器
 │   └── llm/
-│       └── client.py         # OpenAI-compatible API wrapper
+│       └── client.py         # OpenAI 兼容 API 封装
 │
-├── frontend/                 # Streamlit
-│   ├── app.py                # Entry: chat UI, SSE consumer, session state
+├── frontend/                 # Streamlit 前端
+│   ├── app.py                # 入口：聊天 UI, SSE 消费, 会话状态
 │   ├── components/
-│   │   ├── chat.py           # Rich assistant message renderer
-│   │   └── chart.py          # pyecharts bar/line/pie → HTML embed
+│   │   ├── chat.py           # 富文本助手消息渲染
+│   │   └── chart.py          # pyecharts 柱状图/折线图/饼图 → HTML 嵌入
 │   └── utils/
-│       └── api.py            # httpx SSE client
+│       └── api.py            # httpx SSE 客户端
 │
 ├── scripts/
-│   └── init_db.sql           # PostgreSQL schema initialization
+│   └── init_db.sql           # PostgreSQL Schema 初始化
 │
 └── requirements.txt
 ```
 
 ---
 
-## Quick Start
+## 快速开始
 
-### Prerequisites
+### 环境要求
 
 - Python 3.12+
-- PostgreSQL 16+ (or use the included `docker-compose.yml`)
+- PostgreSQL 16+（或使用项目自带的 `docker-compose.yml`）
 - dbt-core 1.11+
-- An LLM API key (DeepSeek, OpenAI, or compatible)
+- LLM API Key（DeepSeek、OpenAI 或兼容 API）
 
-### 1. Clone
+### 1. 克隆项目
 
 ```bash
-git clone https://github.com/QDD518/Data-Agent-Chat-BI-Based-On-DBT.git
-cd Data-Agent-Chat-BI-Based-On-DBT
+git clone https://github.com/QDD518/data-agent-dbt-hybrid.git
+cd data-agent-dbt-hybrid
 python -m venv venv
-source venv/Scripts/activate  # or: venv\Scripts\activate
+source venv/Scripts/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### 2. Configure
+### 2. 配置环境变量
 
 ```bash
 cp .env.example .env
-# Edit .env with your API key and PostgreSQL connection
+# 编辑 .env，填入你的 API Key 和 PostgreSQL 连接信息
 ```
 
-Required `.env` variables:
+必要的 `.env` 变量：
 
-| Variable | Description |
-|----------|-------------|
-| `OPENAI_API_KEY` | LLM API key |
-| `OPENAI_BASE_URL` | API base URL (DeepSeek: `https://api.deepseek.com`) |
-| `LLM_MODEL` | Chat model name |
-| `POSTGRES_HOST` / `POSTGRES_PORT` / `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` | PG connection |
-| `POSTGRES_SCHEMA` | Default schema (default: `analytics`) |
+| 变量 | 说明 |
+|------|------|
+| `OPENAI_API_KEY` | LLM API 密钥 |
+| `OPENAI_BASE_URL` | API 基础 URL（DeepSeek: `https://api.deepseek.com`） |
+| `LLM_MODEL` | 对话模型名 |
+| `POSTGRES_HOST` / `POSTGRES_PORT` / `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` | PG 连接信息 |
+| `POSTGRES_SCHEMA` | 默认 Schema（默认: `analytics`） |
 
-### 3. Seed Data & Build dbt Models
+### 3. 导入种子数据 & 构建 dbt 模型
 
 ```bash
 cd dbt_project
 dbt deps
 dbt seed
 dbt run
-dbt parse          # generates manifest.json + semantic_manifest.json
+dbt parse          # 生成 manifest.json + semantic_manifest.json
 cd ..
 ```
 
-Or use Docker PostgreSQL:
+或使用 Docker PostgreSQL：
 ```bash
-docker-compose up -d        # starts PG16, creates schema
+docker-compose up -d        # 启动 PG16, 创建 Schema
 cd dbt_project && dbt seed && dbt run && dbt parse
 ```
 
-### 4. Start
+### 4. 启动服务
 
-**Terminal 1 — Backend:**
+**终端 1 — 后端：**
 ```bash
 source venv/Scripts/activate
 python -m backend.main
 # → http://localhost:8000
 ```
 
-**Terminal 2 — Frontend:**
+**终端 2 — 前端：**
 ```bash
 source venv/Scripts/activate
 streamlit run frontend/app.py
 # → http://localhost:8501
 ```
 
-### 5. Ask Questions
+### 5. 开始提问
 
-Try these in the Streamlit UI:
+在 Streamlit 界面中尝试：
 
-| Question | Path | What Happens |
-|----------|------|--------------|
-| 上月营收是多少？ | A | Deterministic SQL from semantic metadata |
-| 按城市分组的订单量 | A | Metric + dimension, grouped |
-| 哪个城市的客户平均客单价最高？ | B | LLM generates ad-hoc SQL with RAG context |
-| 本月每天的收入趋势 | A | Metric + time dimension + daily granularity |
-| revenue 是怎么计算的？ | C | RAG retrieves metric definition, LLM answers |
+| 问题 | 路径 | 执行逻辑 |
+|------|------|----------|
+| 上月营收是多少？ | A | 从语义元数据确定性生成 SQL |
+| 按城市分组的订单量 | A | 指标 + 维度，分组聚合 |
+| 哪个城市的客户平均客单价最高？ | B | LLM 结合 RAG 上下文生成 ad-hoc SQL |
+| 本月每天的收入趋势 | A | 指标 + 时间维度 + 日粒度 |
+| revenue 是怎么计算的？ | C | RAG 检索指标定义，LLM 直接回答 |
 
 ---
 
-## How the Semantic Layer Works
+## 语义层工作原理
 
-### Define metrics in dbt YAML
+### 在 dbt YAML 中定义指标
 
 ```yaml
 # dbt_project/models/marts/metrics.yml
@@ -250,11 +251,11 @@ metrics:
     label: "Total Revenue"
     type: simple
     type_params:
-      measure: revenue          # references measure in semantic_models.yml
+      measure: revenue          # 引用 semantic_models.yml 中的 measure
     filter: "{{ dim('status') }} = 'Completed'"
 ```
 
-### Define semantic models (measures + dimensions)
+### 定义语义模型（度量 + 维度）
 
 ```yaml
 # dbt_project/models/marts/semantic_models.yml
@@ -276,40 +277,40 @@ semantic_models:
         expr: net_amount
 ```
 
-### dbt parse → semantic_manifest.json → Deterministic SQL
+### dbt parse → semantic_manifest.json → 确定性 SQL
 
 ```bash
-dbt parse  # validates & outputs manifests
-# backend reads semantic_manifest.json at startup
-# Path A generates: SELECT SUM(net_amount) FROM analytics.fact_orders WHERE status = 'Completed'
+dbt parse  # 校验并输出 manifest 文件
+# 后端在启动时读取 semantic_manifest.json
+# 路径 A 生成: SELECT SUM(net_amount) FROM analytics.fact_orders WHERE status = 'Completed'
 ```
 
 ---
 
-## Tech Stack
+## 技术栈
 
-| Layer | Technology |
-|-------|-----------|
-| Data transformation | dbt-core 1.11 (staging views → mart tables) |
-| Semantic layer | dbt Semantic Models + Metrics (YAML → `semantic_manifest.json`) |
-| Query generation | Custom Python SQL builder (Path A) + LLM (Path B) |
-| Database | PostgreSQL 16 (SQLAlchemy + psycopg2) |
-| Backend | FastAPI + SSE streaming |
-| Frontend | Streamlit + pyecharts |
-| LLM | DeepSeek V4 / OpenAI / compatible API |
-| RAG | Keyword overlap (CJK bigram + Latin tokenizer) |
-| Security | SQL keyword blocklist, SELECT-only, row limit, timeout |
+| 层级 | 技术 |
+|------|------|
+| 数据转换 | dbt-core 1.11（staging 视图 → mart 表） |
+| 语义层 | dbt Semantic Models + Metrics（YAML → `semantic_manifest.json`） |
+| 查询生成 | 自定义 Python SQL Builder（路径 A）+ LLM（路径 B） |
+| 数据库 | PostgreSQL 16（SQLAlchemy + psycopg2） |
+| 后端 | FastAPI + SSE 流式传输 |
+| 前端 | Streamlit + pyecharts |
+| 大模型 | DeepSeek V4 / OpenAI / 兼容 API |
+| RAG | 关键词重叠度检索（CJK 二元分词 + 拉丁词分词） |
+| 安全 | SQL 关键词黑名单、仅允许 SELECT、行数限制、超时控制 |
 
 ---
 
 ## License
 
-MIT — see [LICENSE](LICENSE) file.
+MIT — 详见 [LICENSE](LICENSE) 文件。
 
 ---
 
-## Author
+## 作者
 
 **QDD518** — [github.com/QDD518](https://github.com/QDD518)
 
-*Built as an open-source Chat BI reference architecture. Contributions and feedback welcome.*
+*作为开源 Chat BI 参考架构构建。欢迎贡献和反馈。*
