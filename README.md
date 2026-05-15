@@ -1,8 +1,14 @@
 # Data Agent — dbt Hybrid
 
-**基于 dbt Semantic Layer + LLM Text-to-SQL + RAG 的开源 Chat BI 智能体。三路径混合架构（指标查询 / Text-to-SQL / 元数据问答），确定性 + 灵活性兼得。**
+**一个智能体，三条路径，绝不瞎编——基于 dbt Semantic Layer 的开源 Chat BI。**
 
-用自然语言提问 — 系统将每个问题路由到三条专用路径之一，返回 SQL、数据表格、图表和自然语言摘要。基于 dbt + PostgreSQL + DeepSeek（或任何 OpenAI 兼容的 LLM）。
+用自然语言提问，系统智能路由：
+
+- **指标类问题** → dbt 指标层确定性 SQL → 执行（绝不瞎编）
+- **探索性问题** → LLM + dbt Schema 做 Text-to-SQL → 执行（灵活）
+- **元数据问题** → 查 dbt Docs 直接回答（免查询）
+
+基于 dbt + PostgreSQL + DeepSeek（或任何 OpenAI 兼容的 LLM）。
 
 > [English Version →](README_EN.md)
 

@@ -1,8 +1,14 @@
 # Data Agent — dbt Hybrid
 
-**Open-source Chat BI agent powered by dbt Semantic Layer + LLM Text-to-SQL + RAG. Three-path hybrid architecture — deterministic metrics, flexible exploration, and metadata Q&A in one system.**
+**One agent. Three paths. Never hallucinates. — An open-source Chat BI powered by dbt Semantic Layer.**
 
-Ask business questions in natural language — the system routes each question through one of three specialized paths and returns SQL, data tables, charts, and NL summaries. Built on dbt + PostgreSQL + DeepSeek (or any OpenAI-compatible LLM).
+Ask questions in natural language. The system routes intelligently:
+
+- **Metric questions** → dbt Metrics → deterministic SQL → execute (never hallucinates)
+- **Exploratory questions** → LLM + dbt Schema → Text-to-SQL → execute (flexible)
+- **Metadata questions** → dbt Docs → direct answer (no query needed)
+
+Built on dbt + PostgreSQL + DeepSeek (or any OpenAI-compatible LLM).
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/)
 [![dbt 1.11+](https://img.shields.io/badge/dbt-1.11+-orange.svg)](https://docs.getdbt.com/)
