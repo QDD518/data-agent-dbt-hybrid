@@ -16,6 +16,90 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - chatbi-net
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: chatbi-backend
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-sk-your-key-here}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4o}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: chatbi_demo
+      POSTGRES_USER: chatbi
+      POSTGRES_PASSWORD: chatbi123
+      POSTGRES_SCHEMA: analytics
+      DBT_PROJECT_DIR: ./dbt_project
+      DBT_PROFILES_DIR: ./dbt_project
+      APP_HOST: 0.0.0.0
+      APP_PORT: 8000
+    volumes:
+      - dbt_target:/app/dbt_project/target
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - chatbi-net
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: chatbi-frontend
+    environment:
+      BACKEND_URL: http://backend:8000
+    ports:
+      - "8501:8501"
+    depends_on:
+      - backend
+    networks:
+      - chatbi-net
+    restart: unless-stopped
+
+  # Optional: run dbt models after postgres is ready
+  dbt-setup:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: chatbi-dbt-setup
+    command: >
+      sh -c "
+        cd dbt_project &&
+        dbt seed &&
+        dbt run &&
+        dbt parse
+      "
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: chatbi_demo
+      POSTGRES_USER: chatbi
+      POSTGRES_PASSWORD: chatbi123
+      POSTGRES_SCHEMA: analytics
+      DBT_PROJECT_DIR: ./dbt_project
+      DBT_PROFILES_DIR: ./dbt_project
+    volumes:
+      - dbt_target:/app/dbt_project/target
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - chatbi-net
+    profiles:
+      - setup  # Only runs with: docker-compose --profile setup up
 
 volumes:
   postgres_data:
+  dbt_target:
+
+networks:
+  chatbi-net:
+    driver: bridge

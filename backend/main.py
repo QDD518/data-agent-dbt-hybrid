@@ -49,10 +49,13 @@ app.include_router(chat_router)
 
 if __name__ == "__main__":
     import uvicorn
+    import os
 
+    is_prod = settings.app_env == "production"
     uvicorn.run(
         "backend.main:app",
         host=settings.app_host,
         port=settings.app_port,
-        reload=True,
+        reload=not is_prod,
+        workers=os.cpu_count() if is_prod else 1,
     )

@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     dbt_profiles_dir: str = "./dbt_project"
 
     # App
+    app_env: str = "development"   # "development" or "production"
     app_host: str = "0.0.0.0"
     app_port: int = 8000
     max_query_timeout: int = 30
