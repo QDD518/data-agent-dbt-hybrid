@@ -10,7 +10,7 @@ BACKEND_URL = "http://localhost:8000"
 
 def stream_chat(message: str) -> Generator[dict, None, None]:
     """POST to /api/chat and yield SSE events as they arrive."""
-    with httpx.Client(timeout=90) as client:
+    with httpx.Client(timeout=90, trust_env=False) as client:
         with client.stream(
             "POST",
             f"{BACKEND_URL}/api/chat",

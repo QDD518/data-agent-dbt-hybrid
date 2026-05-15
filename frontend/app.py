@@ -1,5 +1,11 @@
 """DataAgent-ChatBI — Streamlit frontend."""
 
+import sys
+from pathlib import Path
+
+# Ensure project root is on PYTHONPATH (for `from frontend.xxx` imports)
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 import streamlit as st
 
 from frontend.utils.api import stream_chat
