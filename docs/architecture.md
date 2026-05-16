@@ -2,9 +2,36 @@
 
 ## Overview
 
-Data Agent is a Chat BI system with a **three-path hybrid architecture**. Rather than using one monolithic Text-to-SQL pipeline, it routes each user question to one of three specialized paths, each using dbt differently.
+Data Agent is a Chat BI system with a **four-path hybrid architecture** that combines dbt Semantic Layer with Palantir-inspired Ontology graph traversal. Rather than using one monolithic Text-to-SQL pipeline, it routes each user question to one of four specialized paths.
 
-## Core Principle: Why Hybrid?
+## Core Principle: dbt + Ontology
+
+The system has two conceptual layers on top of PostgreSQL:
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                     Ontology (Business Graph)                     │
+│   8 Object Types · 6 Link Types · Graph Traversal · Path D       │
+│   Models the business as objects connected by named links         │
+└────────────────────────────┬─────────────────────────────────────┘
+                             │ maps to
+┌────────────────────────────▼─────────────────────────────────────┐
+│                  dbt Semantic Layer (Physical)                    │
+│   5 Semantic Models · 28 Metrics · MetricQueryBuilder · Path A   │
+│   Models the data as measures + dimensions on tables              │
+└────────────────────────────┬─────────────────────────────────────┘
+                             │ queries
+┌────────────────────────────▼─────────────────────────────────────┐
+│                     PostgreSQL (CHATBI_DEMO)                      │
+│   17 dbt Models (OBT wide tables) · 8 Seeds                       │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+**dbt's role**: Manages physical data — table definitions, column types, metric formulas, seed data. The source of truth for schema.
+
+**Ontology's role**: Models business logic — objects (Order, Product, Warehouse) and their relationships (placed_by, tracks, stored_in). The graph for traversal queries.
+
+## Four-Path Architecture
 
 ```
                ┌──────────────────────────────┐
@@ -14,46 +41,48 @@ Data Agent is a Chat BI system with a **three-path hybrid architecture**. Rather
                               ▼
                ┌──────────────────────────────┐
                │      Intent Router (LLM)      │
-               │   metric / exploratory / meta │
-               └──────┬───────────┬───────────┘
-                      │           │           │
-           ┌──────────┘           │           └──────────┐
-           ▼                      ▼                       ▼
-  ┌─────────────────┐  ┌──────────────────┐  ┌───────────────────┐
-  │   Path A         │  │   Path B          │  │   Path C           │
-  │   Metric Query   │  │   Text-to-SQL      │  │   Metadata Q&A     │
-  │                  │  │                    │  │                    │
-  │   dbt Metrics    │  │   LLM +            │  │   dbt Docs         │
-  │   → Deterministic│  │   dbt Schema →     │  │   → Direct Answer  │
-  │     SQL          │  │   ad-hoc SQL       │  │                    │
-  └────────┬─────────┘  └────────┬───────────┘  └─────────┬──────────┘
-           │                     │                          │
-           ▼                     ▼                          ▼
-  ┌──────────────────────────────────────────────────────────────┐
-  │                   SQL Security Layer                          │
-  │         Keyword blocklist, SELECT-only, row limit              │
-  └──────────────────────────┬───────────────────────────────────┘
-                             │
-                             ▼
-  ┌──────────────────────────────────────────────────────────────┐
-  │                   SQL Executor                                │
-  │    Read-only transaction, statement timeout, serialization    │
-  └──────────────────────────┬───────────────────────────────────┘
-                             │
-                             ▼
-  ┌──────────────────────────────────────────────────────────────┐
-  │                  NL Interpreter (LLM)                         │
-  │         Summary + Chart recommendation + Key insight           │
-  └──────────────────────────┬───────────────────────────────────┘
-                             │
-                             ▼
-  ┌──────────────────────────────────────────────────────────────┐
-  │                    SSE Streaming                              │
-  │    Real-time events: classify → SQL → execute → interpret     │
-  └──────────────────────────────────────────────────────────────┘
+               │ metric / ontology / explor /  │
+               │ metadata                      │
+               └──┬──────────┬────────┬───────┘
+                  │          │        │         │
+     ┌────────────┘  ┌───────┘        │         └──────────┐
+     ▼               ▼                ▼                     ▼
+┌──────────┐  ┌─────────────┐  ┌───────────┐  ┌──────────────────┐
+│  Path A   │  │  Path D      │  │  Path B    │  │  Path C          │
+│  Metric   │  │  Ontology    │  │  Text-to-  │  │  Metadata Q&A    │
+│  Query    │  │  Traversal   │  │  SQL       │  │                  │
+│           │  │              │  │            │  │  dbt Docs →       │
+│  Metrics  │  │  Object      │  │  LLM + dbt │  │  Direct Answer   │
+│  → Single │  │  Graph →     │  │  Schema +  │  │  + Sources        │
+│  table    │  │  CTE chain   │  │  Ontology   │  │                  │
+│  SQL      │  │  SQL         │  │  → ad-hoc   │  │                  │
+└─────┬─────┘  └──────┬───────┘  └─────┬──────┘  └────────┬─────────┘
+      │               │                │                   │
+      └───────────────┴────────────────┴───────────────────┘
+                              │
+                              ▼
+               ┌──────────────────────────────┐
+               │      SQL Security Layer       │
+               │  Keyword blocklist, SELECT-only│
+               └──────────────┬───────────────┘
+                              ▼
+               ┌──────────────────────────────┐
+               │        SQL Executor           │
+               │  Read-only, timeout, row limit│
+               └──────────────┬───────────────┘
+                              ▼
+               ┌──────────────────────────────┐
+               │     NL Interpreter (LLM)      │
+               │  Summary + Chart + Insight    │
+               └──────────────┬───────────────┘
+                              ▼
+               ┌──────────────────────────────┐
+               │        SSE Streaming          │
+               │  classify → SQL → exec → done │
+               └──────────────────────────────┘
 ```
 
-## Path A — Metric Query (Deterministic)
+## Path A — Metric Query (Deterministic, Single-Table)
 
 **Strategy**: Use dbt semantic layer metadata to generate SQL with zero hallucination.
 
@@ -69,44 +98,89 @@ Data Agent is a Chat BI system with a **three-path hybrid architecture**. Rather
 **Example**:
 ```
 User: "上月营收是多少？"
-  → Intent: {metric: total_revenue, time_range: last_month}
+  → Path A: {metric: total_revenue, time_range: last_month}
   → SQL: SELECT SUM(net_amount) AS total_revenue
-          FROM analytics.fact_orders
+          FROM analytics_analytics.fact_orders
           WHERE order_date >= date_trunc('month', CURRENT_DATE) - interval '1 month'
           ORDER BY 1 DESC
 ```
 
-## Path B — Exploratory Text-to-SQL
+## Path D — Ontology Graph Traversal (Deterministic, Multi-Hop)
 
-**Strategy**: Use LLM + dbt schema context for ad-hoc questions.
+**Strategy**: Traverse the business object graph to generate CTE-chain SQL for multi-object questions.
 
 **Flow**:
-1. Keyword retriever finds relevant dbt model documentation
-2. dbt metadata (table names, column names, descriptions) is injected as RAG context
-3. LLM generates a SELECT query grounded in the actual schema
-4. SQL passes through security layer before execution
+1. Intent Router classifies as `ontology_query`, extracts start_object, properties, filters
+2. `GraphTraverser` reads `ontology.yml` and reconstructs the business graph
+3. For each non-denormalized hop: creates a CTE selecting target columns with filters
+4. Denormalized hops: merges target columns into source CTE (no JOIN needed)
+5. Final SELECT joins CTEs through primary/foreign key chains
 
-**dbt's role**: Provides ground-truth schema context (manifest.json) — the LLM doesn't need to guess column names
+**Ontology's role**: Models the business as Object Types connected by Link Types. Each Object Type maps to a dbt table. Denormalized links detect when two objects share the same table — avoiding wasteful self-JOINs.
+
+**Example**:
+```
+User: "North仓库有哪些商品需要补货？"
+  → Path D: {start_object: InventoryRecord,
+             filters: [{property: warehouse_region, op: eq, value: North},
+                       {property: needs_reorder, op: eq, value: true}],
+             properties: [product_name, warehouse_name]}
+  → SQL: SELECT product_name, warehouse_name
+          FROM analytics_analytics.fact_inventory
+          WHERE warehouse_region = 'North' AND needs_reorder = TRUE
+  → Result: 4K Monitor 27-inch (北京顺义仓), Sony WH-1000XM5 (北京顺义仓)
+```
+
+For queries that need actual joins (e.g., Order → Customer):
+```
+User: "Completed orders with customer segment"
+  → Path D: {start_object: Order,
+             path: [{link: placed_by, target: Customer, select: [segment]}],
+             filters: [{property: status, op: eq, value: Completed}]}
+  → SQL: WITH
+           c0 AS (SELECT order_id, customer_id, net_amount
+                  FROM analytics_analytics.fact_orders WHERE status = 'Completed'),
+           c1 AS (SELECT customer_id, segment
+                  FROM analytics_analytics.dim_customers)
+         SELECT c0.order_id, c0.net_amount, c1.segment
+         FROM analytics_analytics.fact_orders AS c0
+         JOIN c1 ON c0.customer_id = c1.customer_id
+```
+
+### Cross-Model Fallback (Path A → D)
+
+When Path A detects metrics spanning multiple semantic models, it raises `CrossModelQueryError`. The orchestrator catches this and falls back to ontology traversal — mapping metric names to Object Types and building aggregate CTE queries automatically.
+
+## Path B — Exploratory Text-to-SQL (LLM + RAG)
+
+**Strategy**: Use LLM + dbt schema context + ontology join guidance for ad-hoc questions.
+
+**Flow**:
+1. Keyword retriever finds relevant dbt model documentation AND ontology object/link documents
+2. dbt metadata (table names, column names, descriptions) is injected as RAG context
+3. Ontology graph (Object Types with their tables and outbound links) provides explicit join-path guidance
+4. LLM generates a SELECT query grounded in the actual schema and valid relationships
+5. SQL passes through security layer before execution
+
+**dbt + Ontology's role**: dbt provides ground-truth schema; Ontology tells the LLM which JOINs are valid (e.g., "Order links to Customer via customer_id — `placed_by`")
 
 **Example**:
 ```
 User: "哪个城市的客户平均客单价最高？"
-  → RAG retrieves: fact_orders columns (customer_id, net_amount, city...)
+  → RAG retrieves: fact_orders columns + Ontology "Order → Customer via placed_by"
   → LLM generates: SELECT city, AVG(net_amount) AS avg_order_value
-                    FROM analytics.fact_orders
+                    FROM analytics_analytics.fact_orders
                     GROUP BY city ORDER BY 2 DESC
 ```
 
 ## Path C — Metadata Q&A
 
-**Strategy**: Direct RAG answer from dbt documentation — no SQL.
+**Strategy**: Direct RAG answer from dbt documentation + ontology context — no SQL.
 
 **Flow**:
-1. Keyword retriever finds relevant dbt docs (model descriptions, metrics definitions)
+1. Keyword retriever finds relevant dbt docs + ontology object/link descriptions
 2. LLM synthesizes an answer from the retrieved context
 3. Returns: natural language answer + source references
-
-**dbt's role**: Provides the documentation corpus (model descriptions, column docs, metric definitions)
 
 **Example**:
 ```
@@ -115,40 +189,112 @@ User: "revenue 是怎么计算的？"
   → Answer: "revenue = SUM(net_amount)，数据源来自 fact_orders 表，已过滤 status = 'Completed'"
 ```
 
-## Last-Mile Aggregation
+## Last-Mile Aggregation, Extended
 
-A key architectural decision: **dbt models handle complex joins, the semantic layer only does last-mile aggregation.**
+Path A keeps the original principle: **dbt models handle complex joins → single-table aggregation only.**
+
+Path D extends this: **when multiple objects are needed, the Ontology generates CTE chains explicitly, using only the join keys defined in Link Types.** The system never guesses JOINs — every join is pre-defined in `ontology.yml`.
 
 ```
-Wrong approach (Text-to-SQL naive):
-  SELECT ... FROM orders JOIN customers JOIN products ...  ← LLM must get joins right
+Path A (single table):
+  SELECT SUM(quantity_on_hand) FROM analytics_analytics.fact_inventory
 
-Our approach:
-  dbt: fact_orders = orders ⋈ customers ⋈ products  (pre-joined OBT wide table)
-  Semantic: SELECT SUM(net_amount) FROM fact_orders WHERE ... GROUP BY ...
+Path D (multi-hop, CTE chain):
+  WITH c0 AS (SELECT order_id, customer_id, net_amount FROM fact_orders WHERE ...),
+       c1 AS (SELECT customer_id, segment FROM dim_customers)
+  SELECT c0.net_amount, c1.segment
+  FROM fact_orders AS c0 JOIN c1 ON c0.customer_id = c1.customer_id
 ```
 
-This means the semantic SQL builder never needs to handle JOINs, graph traversal, or multi-table queries. Each query hits exactly one table.
+### Denormalized Link Optimization
+
+When two Object Types share the same physical dbt table (e.g., `InventoryRecord` and `Warehouse` both on `fact_inventory`), the `denormalized: true` flag in `ontology.yml` tells the traverser to skip the JOIN. Warehouse columns are selected directly from the fact table:
+
+```
+Question: "哪些仓库有大容量库存？"
+  → InventoryRecord → Warehouse via stored_in (denormalized)
+  → SQL: SELECT warehouse_name, warehouse_size, quantity_on_hand
+          FROM analytics_analytics.fact_inventory
+          WHERE warehouse_size = 'Large'
+  → No JOIN generated — Warehouse columns are already on fact_inventory
+```
+
+## Ontology Design
+
+The ontology is defined in `dbt_project/models/marts/ontology.yml`, co-located with dbt's `semantic_models.yml` and `metrics.yml`. It uses three primitives inspired by Palantir Foundry:
+
+### Object Types (8)
+Each maps to a dbt model table. Defines: `name`, `display_name` (Chinese), `icon`/`color` (for frontend), `primary_key`, `table`, `time_dimension`, `properties` (typed: String/Numeric/Date/Boolean).
+
+| Object | dbt Table | Example Properties |
+|---|---|---|
+| Order | fact_orders | order_id, net_amount, status, customer_segment |
+| Customer | dim_customers | customer_id, customer_name, region, segment |
+| Product | dim_products | product_id, product_name, category, cost_price |
+| Warehouse | fact_inventory | warehouse_id, warehouse_name, warehouse_region, warehouse_size |
+| InventoryRecord | fact_inventory | inventory_id, quantity_on_hand, needs_reorder, days_since_restock |
+| CampaignResult | fact_marketing | result_id, impressions, clicks, conversions, roas |
+| Campaign | fact_marketing | campaign_id, campaign_name, channel, campaign_type |
+| RFMCustomer | dim_customers_rfm | customer_id, recency_days, frequency, rfm_segment |
+
+### Link Types (6)
+Named, directed edges with explicit join keys and cardinality. The `denormalized` flag prevents unnecessary self-JOINs.
+
+| Link | Source → Target | Join Key | Denormalized? |
+|---|---|---|---|
+| `placed_by` | Order → Customer | customer_id | No |
+| `contains` | Order → Product | product_id | No |
+| `tracks` | InventoryRecord → Product | product_id | No |
+| `stored_in` | InventoryRecord → Warehouse | warehouse_id | **Yes** |
+| `measures_performance_of` | CampaignResult → Campaign | campaign_id | **Yes** |
+| `ordered_by_rfm` | Order → RFMCustomer | customer_id | No |
+
+### GraphTraverser Engine
+
+```python
+# BFS path-finding between any two Object Types
+traverser.find_paths("InventoryRecord", "Customer", max_hops=3)
+
+# SQL generation via CTE chain
+request = TraversalRequest(
+    start_object="Order",
+    path=[TraversalStep(link=placed_by, select_properties=["segment"])],
+    filters=[FilterClause("status", "eq", "Completed")],
+)
+sql = traverser.build_sql(request)  # deterministic CTE SQL
+```
+
+Supports 12 filter operators (eq/neq/gt/gte/lt/lte/in/between/like/is_null/is_not_null), parameterized time resolution per object's `time_dimension`.
 
 ## Intent Router
 
-A lightweight LLM prompt classifies every question into one of three paths:
+A lightweight LLM prompt classifies every question into one of four paths:
 
 | Question Pattern | Path | Example |
 |-----------------|------|---------|
 | Asks about predefined metrics | A | "上月营收多少？" |
+| Cross-entity / multi-object questions | D | "North仓库有哪些商品需要补货？" |
 | Ad-hoc/exploratory analysis | B | "哪个城市客单价最高？" |
 | Asks about definitions/data models | C | "revenue 怎么计算的？" |
 
-The router also extracts structured parameters (metric names, dimensions, time ranges) for Path A.
+The router also extracts structured parameters:
+- **Path A**: metric_names, dimensions, time_range
+- **Path D**: start_object, properties, filters, time_range
+- **Path B/C**: raw message (LLM handles the rest)
 
-## RAG: Keyword-Based Retrieval
+## RAG: Keyword-Based Retrieval (with Ontology Enrichment)
 
 We use **keyword overlap scoring** instead of embedding vectors because:
 - DeepSeek's embedding API is unavailable (returns 404)
-- For 22 metadata documents, keyword matching is fast and effective
+- For 36+ metadata documents (22 dbt + 14 ontology), keyword matching is fast and effective
 - CJK bigram tokenizer handles Chinese text well
 - No external embedding API costs
+
+**Document pool** (generated by `MetadataStore.to_rag_documents()`):
+- **22 dbt documents**: One per model (table columns), one per metric, one per semantic model
+- **14 ontology documents**: One per Object Type (properties + outbound links), one per Link Type (join key + cardinality + denormalized flag)
+
+Path B's prompt is enriched with a dedicated "Ontology Object Graph" section that tells the LLM exactly which JOINs are valid for each Object Type.
 
 ## SQL Security
 
@@ -178,9 +324,10 @@ data: {"type":"done","summary":"..."}
 
 | Decision | Choice | Why |
 |----------|--------|-----|
-| No MetricFlow PyPI | Custom SQL builder | metricflow package is dead (click version conflict) |
-| No ChromaDB | Keyword retriever | Embedding API unavailable, 22 docs is small enough |
-| No LangChain | Custom orchestrator | Avoids abstraction overhead, ~50 lines of custom code |
-| No dbt Cloud | dbt OSS + custom parser | dbt Cloud's query engine is paid; we fill the gap |
+| No MetricFlow PyPI | Custom SQL builder + GraphTraverser | metricflow package is dead; our builder handles single-table + CTE chains |
+| No graph database | In-memory YAML adjacency | 8 objects + 6 links is trivially fast in pure Python (BFS O(V+E)) |
+| No ChromaDB | Keyword retriever | Embedding API unavailable; 36 docs (22 dbt + 14 ontology) is small enough |
+| No LangChain | Custom orchestrator | Avoids abstraction overhead; 4 paths in ~300 lines of custom code |
+| No dbt Cloud | dbt OSS + custom parser | dbt Cloud's query engine is paid; we fill the gap with our own SQL generation |
 | PostgreSQL sync | SQLAlchemy sync engine | Simpler than async for read-only OLAP queries |
-| Streamlit | Frontend | Fast prototype, sufficient for MVP |
+| Streamlit | Frontend | Fast prototype; ontology explorer rendered as expandable cards in sidebar |
