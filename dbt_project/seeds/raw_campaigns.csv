@@ -1,0 +1,11 @@
+campaign_id,campaign_name,channel,start_date,end_date,budget,target_audience,campaign_type
+CAMP001,618年中大促,Social Media,2025-06-01,2025-06-18,50000,All,Promotion
+CAMP002,双11全球狂欢,Search Engine,2025-11-01,2025-11-11,120000,All,Mega Sale
+CAMP003,新品手机上市,Social Media,2025-07-15,2025-08-15,30000,Premium,Product Launch
+CAMP004,开学季笔记本促销,Email,2025-08-20,2025-09-15,20000,Students,Seasonal
+CAMP005,年终清仓折扣,Search Engine,2025-12-01,2025-12-31,15000,Standard,Clearance
+CAMP006,春节不打烊,Social Media,2026-01-25,2026-02-10,45000,All,Promotion
+CAMP007,三八女神节,Email,2026-03-01,2026-03-10,18000,Female,Seasonal
+CAMP008,音频设备体验月,Display Ads,2026-04-01,2026-04-30,22000,Audio Lovers,Product Launch
+CAMP009,智能穿戴新品,Social Media,2026-02-15,2026-03-20,35000,Tech Enthusiasts,Product Launch
+CAMP010,老客户回馈计划,Email,2026-04-15,2026-05-15,10000,Premium,Retention

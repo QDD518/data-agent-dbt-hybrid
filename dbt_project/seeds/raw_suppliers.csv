@@ -1,0 +1,11 @@
+supplier_id,supplier_name,country,lead_time_days,is_premium,product_category
+SUP001,深圳华芯电子,China,3,true,Smartphones
+SUP002,鸿海精密工业,China,5,true,Laptops
+SUP003,京东方科技,China,4,true,Tablets
+SUP004,惠州德赛电池,China,2,true,Accessories
+SUP005,韩国三星电子,South Korea,14,true,Smartphones
+SUP006,日本索尼集团,Japan,7,true,Audio
+SUP007,深圳立讯精密,China,3,false,Accessories
+SUP008,台湾台积电,Taiwan,10,true,Laptops
+SUP009,越南富港电子,Vietnam,21,false,Wearables
+SUP010,印度塔塔电子,India,30,false,Accessories

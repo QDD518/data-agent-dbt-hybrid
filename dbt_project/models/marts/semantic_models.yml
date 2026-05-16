@@ -150,3 +150,254 @@ semantic_models:
         description: "Total number of registered customers"
         agg: count_distinct
         expr: customer_id
+
+  # ── Inventory semantic model ──
+  - name: inventory
+    description: "Inventory stock levels by product, warehouse, and supplier. Supports stock analysis and reorder monitoring."
+    model: ref('fact_inventory')
+
+    defaults:
+      agg_time_dimension: last_restock_date
+
+    entities:
+      - name: inventory_record
+        type: primary
+        expr: inventory_id
+        description: "Unique inventory record"
+
+      - name: product
+        type: foreign
+        expr: product_id
+        description: "Product in stock"
+
+      - name: warehouse
+        type: foreign
+        expr: warehouse_id
+        description: "Warehouse location"
+
+    dimensions:
+      - name: last_restock_date
+        type: time
+        type_params:
+          time_granularity: day
+        description: "Date of last inventory replenishment"
+
+      - name: product_category
+        type: categorical
+        expr: product_category
+        description: "Product top-level category"
+
+      - name: warehouse_city
+        type: categorical
+        expr: warehouse_city
+        description: "Warehouse city"
+
+      - name: warehouse_region
+        type: categorical
+        expr: warehouse_region
+        description: "Warehouse region"
+
+      - name: warehouse_size
+        type: categorical
+        expr: warehouse_size
+        description: "Warehouse capacity tier: Large, Medium, Small"
+
+      - name: delivery_tier
+        type: categorical
+        expr: delivery_tier
+        description: "Supplier delivery speed: Fast, Normal, Slow"
+
+      - name: needs_reorder
+        type: categorical
+        expr: needs_reorder
+        description: "Whether stock is below reorder point"
+
+      - name: is_out_of_stock
+        type: categorical
+        expr: is_out_of_stock
+        description: "Whether item is completely out of stock"
+
+    measures:
+      - name: total_stock_quantity
+        description: "Total units in stock across all warehouses"
+        agg: sum
+        expr: quantity_on_hand
+
+      - name: total_inventory_value
+        description: "Total value of inventory (quantity * cost price)"
+        agg: sum
+        expr: inventory_value
+
+      - name: reorder_required_count
+        description: "Number of inventory items below reorder point"
+        agg: sum
+        expr: needs_reorder::int
+
+      - name: out_of_stock_count
+        description: "Number of items completely out of stock"
+        agg: sum
+        expr: is_out_of_stock::int
+
+      - name: avg_days_since_restock
+        description: "Average days since last restock"
+        agg: average
+        expr: days_since_restock
+
+  # ── Marketing semantic model ──
+  - name: marketing
+    description: "Campaign performance daily metrics. Tracks impressions, clicks, conversions, cost, and revenue across marketing campaigns."
+    model: ref('fact_marketing')
+
+    defaults:
+      agg_time_dimension: date
+
+    entities:
+      - name: campaign_result
+        type: primary
+        expr: result_id
+        description: "Unique campaign result record"
+
+      - name: campaign
+        type: foreign
+        expr: campaign_id
+        description: "Marketing campaign"
+
+    dimensions:
+      - name: date
+        type: time
+        type_params:
+          time_granularity: day
+        description: "Performance date"
+
+      - name: channel
+        type: categorical
+        expr: channel
+        description: "Marketing channel: Social Media, Search Engine, Email, Display Ads"
+
+      - name: campaign_type
+        type: categorical
+        expr: campaign_type
+        description: "Campaign type: Promotion, Mega Sale, Product Launch, Seasonal, Clearance, Retention"
+
+      - name: target_audience
+        type: categorical
+        expr: target_audience
+        description: "Target audience segment"
+
+      - name: campaign_name
+        type: categorical
+        expr: campaign_name
+        description: "Campaign display name"
+
+    measures:
+      - name: total_impressions
+        description: "Total ad impressions across all campaigns"
+        agg: sum
+        expr: impressions
+
+      - name: total_clicks
+        description: "Total clicks across all campaigns"
+        agg: sum
+        expr: clicks
+
+      - name: total_conversions
+        description: "Total conversions (purchases) from campaigns"
+        agg: sum
+        expr: conversions
+
+      - name: total_ad_spend
+        description: "Total advertising cost"
+        agg: sum
+        expr: cost
+
+      - name: total_campaign_revenue
+        description: "Total revenue attributed to campaigns"
+        agg: sum
+        expr: revenue_generated
+
+      - name: total_campaign_profit
+        description: "Total net profit from campaigns (revenue - cost)"
+        agg: sum
+        expr: net_profit
+
+      - name: avg_ctr
+        description: "Average click-through rate"
+        agg: average
+        expr: ctr
+
+      - name: avg_conversion_rate
+        description: "Average conversion rate"
+        agg: average
+        expr: conversion_rate
+
+      - name: avg_roas
+        description: "Average Return on Ad Spend"
+        agg: average
+        expr: roas
+
+      - name: avg_cpa
+        description: "Average Cost per Acquisition"
+        agg: average
+        expr: cpa
+
+  # ── Customer RFM semantic model ──
+  - name: customers_rfm
+    description: "Customer RFM segmentation with recency, frequency, monetary scores and segment labels"
+    model: ref('dim_customers_rfm')
+
+    defaults:
+      agg_time_dimension: last_order_date
+
+    entities:
+      - name: rfm_customer
+        type: primary
+        expr: customer_id
+        description: "Unique customer identifier"
+
+    dimensions:
+      - name: last_order_date
+        type: time
+        type_params:
+          time_granularity: day
+        description: "Customer's most recent order date"
+
+      - name: rfm_segment
+        type: categorical
+        expr: rfm_segment
+        description: "RFM segment: Champions, Loyal, At Risk, Lost, Frequent Buyers, etc."
+
+      - name: rfm_region
+        type: categorical
+        expr: region
+        description: "Customer geographic region"
+
+      - name: rfm_city
+        type: categorical
+        expr: city
+        description: "Customer city"
+
+    measures:
+      - name: rfm_customer_count
+        description: "Number of customers in segment"
+        agg: count_distinct
+        expr: customer_id
+
+      - name: avg_recency_days
+        description: "Average days since last purchase"
+        agg: average
+        expr: recency_days
+
+      - name: avg_frequency
+        description: "Average number of orders per customer"
+        agg: average
+        expr: frequency
+
+      - name: avg_monetary
+        description: "Average total spend per customer"
+        agg: average
+        expr: monetary
+
+      - name: avg_rfm_score
+        description: "Average combined RFM score"
+        agg: average
+        expr: rfm_total

@@ -91,3 +91,134 @@ models:
         description: "Unit margin (CNY)"
       - name: margin_pct
         description: "Margin percentage"
+
+  - name: fact_inventory
+    description: "Inventory fact: stock levels joined with product, warehouse, and supplier dimensions"
+    columns:
+      - name: inventory_id
+        description: "Primary key"
+        tests: [unique, not_null]
+      - name: product_id
+        description: "Foreign key to products"
+      - name: warehouse_id
+        description: "Foreign key to warehouses"
+      - name: quantity_on_hand
+        description: "Current stock quantity"
+      - name: reorder_point
+        description: "Minimum stock level before reorder"
+      - name: needs_reorder
+        description: "True if stock below reorder point"
+      - name: is_out_of_stock
+        description: "True if quantity is zero"
+      - name: inventory_value
+        description: "Total inventory value (quantity * cost price) in CNY"
+      - name: days_since_restock
+        description: "Days since last inventory replenishment"
+      - name: product_name
+        description: "Product display name"
+      - name: product_category
+        description: "Product category"
+      - name: warehouse_name
+        description: "Warehouse display name"
+      - name: warehouse_city
+        description: "Warehouse city"
+      - name: warehouse_region
+        description: "Warehouse geographic region"
+      - name: warehouse_size
+        description: "Warehouse capacity tier"
+      - name: supplier_name
+        description: "Primary supplier for this product category"
+      - name: supplier_country
+        description: "Supplier country"
+      - name: lead_time_days
+        description: "Supplier delivery lead time in days"
+      - name: delivery_tier
+        description: "Supplier delivery speed tier"
+
+  - name: fact_marketing
+    description: "Campaign performance fact: daily metrics with campaign metadata and derived KPIs"
+    columns:
+      - name: result_id
+        description: "Primary key"
+        tests: [unique, not_null]
+      - name: campaign_id
+        description: "Foreign key to campaigns"
+      - name: date
+        description: "Date of performance data"
+      - name: impressions
+        description: "Number of ad impressions"
+      - name: clicks
+        description: "Number of clicks"
+      - name: conversions
+        description: "Number of conversions"
+      - name: cost
+        description: "Daily ad spend in CNY"
+      - name: revenue_generated
+        description: "Revenue attributed to campaign"
+      - name: ctr
+        description: "Click-through rate"
+      - name: conversion_rate
+        description: "Conversion rate"
+      - name: roas
+        description: "Return on Ad Spend"
+      - name: cpa
+        description: "Cost per Acquisition"
+      - name: net_profit
+        description: "Net profit after ad spend"
+      - name: campaign_name
+        description: "Campaign display name"
+      - name: channel
+        description: "Marketing channel"
+      - name: campaign_type
+        description: "Campaign type (Promotion, Mega Sale, Product Launch, etc.)"
+      - name: target_audience
+        description: "Target audience segment"
+      - name: budget
+        description: "Total campaign budget"
+
+  - name: dim_customers_rfm
+    description: "Customer RFM segmentation: Recency, Frequency, Monetary analysis with segment labels"
+    columns:
+      - name: customer_id
+        description: "Customer identifier"
+        tests: [unique, not_null]
+      - name: recency_days
+        description: "Days since last purchase"
+      - name: frequency
+        description: "Number of distinct orders"
+      - name: monetary
+        description: "Total spend (CNY)"
+      - name: avg_order_value
+        description: "Average order value (CNY)"
+      - name: r_score
+        description: "Recency score (1-5, 5=most recent)"
+      - name: f_score
+        description: "Frequency score (1-5, 5=most frequent)"
+      - name: m_score
+        description: "Monetary score (1-5, 5=highest spend)"
+      - name: rfm_total
+        description: "Combined RFM score (3-15)"
+      - name: rfm_segment
+        description: "Customer segment label (Champions, Loyal, At Risk, Lost, etc.)"
+      - name: customer_name
+        description: "Customer full name"
+      - name: city
+        description: "Customer city"
+      - name: region
+        description: "Customer region"
+
+  - name: cohort_monthly
+    description: "Monthly cohort retention: tracks customer return rates by first purchase month"
+    columns:
+      - name: cohort_month
+        description: "Month of first purchase (cohort definition)"
+      - name: month_index
+        description: "Months since cohort acquisition (0 = cohort month)"
+      - name: retained_customers
+        description: "Number of cohort customers active in this month"
+      - name: cohort_size
+        description: "Total number of customers in this cohort"
+      - name: retention_pct
+        description: "Retention rate as percentage of cohort size"
+      - name: month_label
+        description: "Human-readable month label"

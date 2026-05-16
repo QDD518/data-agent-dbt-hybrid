@@ -71,3 +71,118 @@ models:
         description: "Unit profit margin (list_price - cost_price)"
       - name: margin_pct
         description: "Margin as percentage of list price"
+
+  - name: stg_warehouses
+    description: "Warehouse locations and capacity tiers"
+    columns:
+      - name: warehouse_id
+        description: "Unique warehouse identifier"
+        tests: [unique, not_null]
+      - name: warehouse_name
+        description: "Warehouse display name"
+      - name: city
+        description: "Warehouse city"
+      - name: region
+        description: "Geographic region"
+      - name: capacity_sqft
+        description: "Warehouse capacity in square feet"
+      - name: is_active
+        description: "Whether the warehouse is currently operational"
+      - name: size_tier
+        description: "Capacity tier: Large, Medium, or Small"
+
+  - name: stg_suppliers
+    description: "Supplier profiles with delivery performance tiers"
+    columns:
+      - name: supplier_id
+        description: "Unique supplier identifier"
+        tests: [unique, not_null]
+      - name: supplier_name
+        description: "Supplier display name"
+      - name: country
+        description: "Supplier country location"
+      - name: lead_time_days
+        description: "Average delivery lead time in days"
+      - name: is_premium
+        description: "Premium supplier flag"
+      - name: product_category
+        description: "Primary product category supplied"
+      - name: delivery_tier
+        description: "Delivery speed tier: Fast (<=5d), Normal (<=14d), Slow (>14d)"
+
+  - name: stg_inventory
+    description: "Inventory snapshots with reorder flags"
+    columns:
+      - name: inventory_id
+        description: "Unique inventory record identifier"
+        tests: [unique, not_null]
+      - name: product_id
+        description: "Foreign key to products"
+      - name: warehouse_id
+        description: "Foreign key to warehouses"
+      - name: quantity_on_hand
+        description: "Current stock quantity"
+      - name: reorder_point
+        description: "Minimum stock level before reorder"
+      - name: last_restock_date
+        description: "Date of last inventory replenishment"
+      - name: needs_reorder
+        description: "True if stock below reorder point"
+      - name: stock_surplus
+        description: "Excess stock above reorder point"
+      - name: is_out_of_stock
+        description: "True if quantity is zero"
+
+  - name: stg_campaigns
+    description: "Marketing campaign master data"
+    columns:
+      - name: campaign_id
+        description: "Unique campaign identifier"
+        tests: [unique, not_null]
+      - name: campaign_name
+        description: "Campaign display name"
+      - name: channel
+        description: "Marketing channel (Social Media, Search Engine, Email, Display Ads)"
+      - name: start_date
+        description: "Campaign start date"
+      - name: end_date
+        description: "Campaign end date"
+      - name: budget
+        description: "Campaign budget in CNY"
+      - name: target_audience
+        description: "Target audience segment"
+      - name: campaign_type
+        description: "Campaign type (Promotion, Mega Sale, Product Launch, Seasonal, Clearance, Retention)"
+      - name: duration_days
+        description: "Total campaign duration in days"
+
+  - name: stg_campaign_results
+    description: "Daily campaign performance metrics with derived KPIs"
+    columns:
+      - name: result_id
+        description: "Unique result record identifier"
+        tests: [unique, not_null]
+      - name: campaign_id
+        description: "Foreign key to campaigns"
+      - name: date
+        description: "Date of performance data"
+      - name: impressions
+        description: "Number of ad impressions"
+      - name: clicks
+        description: "Number of clicks"
+      - name: conversions
+        description: "Number of conversions (purchases)"
+      - name: cost
+        description: "Daily ad spend in CNY"
+      - name: revenue_generated
+        description: "Revenue attributed to campaign on this day"
+      - name: ctr
+        description: "Click-through rate (clicks / impressions)"
+      - name: conversion_rate
+        description: "Conversion rate (conversions / clicks)"
+      - name: roas
+        description: "Return on Ad Spend (revenue / cost)"
+      - name: cpa
+        description: "Cost per Acquisition (cost / conversions)"
+      - name: net_profit
+        description: "Net profit after ad spend (revenue - cost)"

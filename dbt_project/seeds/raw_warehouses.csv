@@ -1,0 +1,6 @@
+warehouse_id,warehouse_name,city,region,capacity_sqft,is_active
+WH001,北京顺义仓,Beijing,North,50000,true
+WH002,上海青浦仓,Shanghai,East,65000,true
+WH003,广州番禺仓,Guangzhou,South,55000,true
+WH004,成都龙泉仓,Chengdu,West,40000,true
+WH005,武汉光谷仓,Wuhan,Central,35000,false

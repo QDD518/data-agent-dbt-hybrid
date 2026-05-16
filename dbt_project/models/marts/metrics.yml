@@ -110,3 +110,119 @@ metrics:
       measure: total_quantity
     filter: |
       status = 'Completed'
+
+  # ── Inventory Metrics ──
+  - name: total_stock_quantity
+    description: "Total units in stock across all warehouses"
+    label: "Total Stock"
+    type: simple
+    type_params:
+      measure: total_stock_quantity
+
+  - name: total_inventory_value
+    description: "Total monetary value of current inventory"
+    label: "Inventory Value"
+    type: simple
+    type_params:
+      measure: total_inventory_value
+
+  - name: reorder_alert_count
+    description: "Number of inventory items requiring reorder"
+    label: "Reorder Alerts"
+    type: simple
+    type_params:
+      measure: reorder_required_count
+
+  - name: out_of_stock_count
+    description: "Number of completely out-of-stock items"
+    label: "Out of Stock"
+    type: simple
+    type_params:
+      measure: out_of_stock_count
+
+  # ── Marketing Metrics ──
+  - name: total_ad_spend
+    description: "Total advertising spend across all campaigns"
+    label: "Ad Spend"
+    type: simple
+    type_params:
+      measure: total_ad_spend
+
+  - name: total_campaign_revenue
+    description: "Total revenue generated from marketing campaigns"
+    label: "Campaign Revenue"
+    type: simple
+    type_params:
+      measure: total_campaign_revenue
+
+  - name: campaign_roi
+    description: "Campaign ROI (net profit / ad spend)"
+    label: "Campaign ROI"
+    type: simple
+    type_params:
+      measure: total_campaign_profit
+
+  - name: total_impressions
+    description: "Total ad impressions across all campaigns"
+    label: "Impressions"
+    type: simple
+    type_params:
+      measure: total_impressions
+
+  - name: total_conversions
+    description: "Total conversions attributed to campaigns"
+    label: "Conversions"
+    type: simple
+    type_params:
+      measure: total_conversions
+
+  - name: average_ctr
+    description: "Average click-through rate across campaigns"
+    label: "Avg CTR"
+    type: simple
+    type_params:
+      measure: avg_ctr
+
+  - name: average_roas
+    description: "Average Return on Ad Spend"
+    label: "Avg ROAS"
+    type: simple
+    type_params:
+      measure: avg_roas
+
+  - name: average_cpa
+    description: "Average Cost per Acquisition"
+    label: "Avg CPA"
+    type: simple
+    type_params:
+      measure: avg_cpa
+
+  # ── Customer RFM Metrics ──
+  - name: total_rfm_customers
+    description: "Total customers with RFM scores"
+    label: "RFM Customers"
+    type: simple
+    type_params:
+      measure: rfm_customer_count
+
+  - name: avg_customer_lifetime_value
+    description: "Average total spend per customer (Monetary)"
+    label: "Avg Customer LTV"
+    type: simple
+    type_params:
+      measure: avg_monetary
+
+  - name: avg_purchase_frequency
+    description: "Average number of orders per customer"
+    label: "Avg Frequency"
+    type: simple
+    type_params:
+      measure: avg_frequency
+
+  # ── Cohort Retention Metric ──
+  - name: customer_count_by_segment
+    description: "Number of customers in each RFM segment"
+    label: "Customers by Segment"
+    type: simple
+    type_params:
+      measure: rfm_customer_count

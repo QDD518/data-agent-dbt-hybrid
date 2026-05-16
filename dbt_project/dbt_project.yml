@@ -46,6 +46,50 @@ seeds:
         subcategory: varchar(50)
         cost_price: numeric(10,2)
         list_price: numeric(10,2)
+    raw_warehouses:
+      +column_types:
+        warehouse_id: varchar(10)
+        warehouse_name: varchar(100)
+        city: varchar(50)
+        region: varchar(30)
+        capacity_sqft: integer
+        is_active: boolean
+    raw_suppliers:
+      +column_types:
+        supplier_id: varchar(10)
+        supplier_name: varchar(100)
+        country: varchar(50)
+        lead_time_days: integer
+        is_premium: boolean
+        product_category: varchar(50)
+    raw_inventory:
+      +column_types:
+        inventory_id: varchar(10)
+        product_id: varchar(10)
+        warehouse_id: varchar(10)
+        quantity_on_hand: integer
+        reorder_point: integer
+        last_restock_date: date
+    raw_campaigns:
+      +column_types:
+        campaign_id: varchar(10)
+        campaign_name: varchar(100)
+        channel: varchar(30)
+        start_date: date
+        end_date: date
+        budget: integer
+        target_audience: varchar(50)
+        campaign_type: varchar(30)
+    raw_campaign_results:
+      +column_types:
+        result_id: varchar(10)
+        campaign_id: varchar(10)
+        date: date
+        impressions: integer
+        clicks: integer
+        conversions: integer
+        cost: integer
+        revenue_generated: integer
 
 models:
   chatbi_ecommerce:
