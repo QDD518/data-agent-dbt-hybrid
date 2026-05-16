@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     dbt_project_dir: str = "./dbt_project"
     dbt_profiles_dir: str = "./dbt_project"
 
+    # Ontology
+    ontology_file: str = "models/marts/ontology.yml"
+
     # App
     app_env: str = "development"   # "development" or "production"
     app_host: str = "0.0.0.0"

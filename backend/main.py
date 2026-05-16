@@ -18,6 +18,13 @@ async def lifespan(app: FastAPI):
     load_metadata()
     logger.info("Metadata loaded (%d models).", len(load_metadata().models))
 
+    # Load ontology
+    logger.info("Loading ontology...")
+    from backend.ontology.parser import load_ontology
+    onto = load_ontology()
+    logger.info("Ontology loaded (%d object types, %d link types).",
+                len(onto.object_by_name), len(onto.link_by_name))
+
     # RAG uses keyword-based retrieval (no embedding API dependency)
     logger.info("Server ready.")
 
@@ -42,9 +49,11 @@ app.add_middleware(
 
 from backend.api.health import router as health_router
 from backend.api.chat import router as chat_router
+from backend.api.ontology import router as ontology_router
 
 app.include_router(health_router)
 app.include_router(chat_router)
+app.include_router(ontology_router)
 
 
 if __name__ == "__main__":

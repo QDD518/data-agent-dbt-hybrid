@@ -7,6 +7,21 @@ Principle (per architecture decision):
   No joins. No graph traversal. 100% deterministic from YAML metadata.
 """
 
+
+class CrossModelQueryError(ValueError):
+    """Raised when metrics span multiple semantic models — falls back to ontology traversal."""
+    def __init__(self, metric_name: str, expected_table: str, actual_table: str,
+                 model_name: str | None = None, intent: dict | None = None):
+        self.metric_name = metric_name
+        self.expected_table = expected_table
+        self.actual_table = actual_table
+        self.model_name = model_name
+        self.intent = intent or {}
+        super().__init__(
+            f"Cross-model query: '{metric_name}' is on '{actual_table}', "
+            f"expected '{expected_table}'."
+        )
+
 from functools import lru_cache
 
 from backend.metadata.parser import load_metadata
@@ -201,9 +216,16 @@ class MetricQueryBuilder:
                 table = md.table
                 model_name = self._metric_model.get(metric_name)
             elif table != md.table:
-                raise ValueError(
-                    f"Cross-model queries not supported in last-mile mode. "
-                    f"Metric '{metric_name}' is on '{md.table}', expected '{table}'."
+                raise CrossModelQueryError(
+                    metric_name=metric_name,
+                    expected_table=table,
+                    actual_table=md.table,
+                    model_name=self._metric_model.get(metric_name),
+                    intent={
+                        "metric_names": query.metric_names,
+                        "dimensions": query.dimensions,
+                        "time_range": query.time_range,
+                    },
                 )
 
             agg_expr = _agg_sql(md.agg, md.expr)
@@ -257,14 +279,13 @@ class MetricQueryBuilder:
         return sql
 
 
-def _resolve_time_filter(time_range: str | None, granularity: str) -> str | None:
-    """Convert a time-range label into a SQL where clause."""
+def _resolve_time_filter(time_range: str | None, time_column: str = "order_date") -> str | None:
+    """Convert a time-range label into a SQL where clause using the given time column."""
     if not time_range:
         return None
 
     time_range_lower = time_range.lower().strip()
 
-    # Map common relative ranges
     relative_ranges = {
         "last_month": "date_trunc('month', CURRENT_DATE) - interval '1 month'",
         "this_month": "date_trunc('month', CURRENT_DATE)",
@@ -278,7 +299,6 @@ def _resolve_time_filter(time_range: str | None, granularity: str) -> str | None
 
     if time_range_lower in relative_ranges:
         start_expr = relative_ranges[time_range_lower]
-        # We need the time dimension column — use a parameterized approach
-        return f"order_date >= {start_expr}"
+        return f"{time_column} >= {start_expr}"
 
     return None

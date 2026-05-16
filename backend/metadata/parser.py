@@ -41,6 +41,14 @@ class MetadataStore:
                 f"Dimensions: {', '.join(dims)}. Measures: {', '.join(meas)}."
             )
 
+        # Append ontology documents for cross-model join guidance
+        try:
+            from backend.ontology.parser import load_ontology
+            onto = load_ontology()
+            docs.extend(onto.to_rag_documents())
+        except Exception:
+            pass
+
         return docs
 
 

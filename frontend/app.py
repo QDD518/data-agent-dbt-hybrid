@@ -8,8 +8,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import streamlit as st
 
-from frontend.utils.api import stream_chat
+from frontend.utils.api import stream_chat, fetch_ontology
 from frontend.components.chat import display_user_message, display_assistant_response
+from frontend.components.ontology_graph import render_ontology
 
 st.set_page_config(
     page_title="DataAgent-ChatBI",
@@ -32,6 +33,7 @@ with st.sidebar:
     st.markdown("### How it works")
     st.markdown("""
     - **Path A** — Metric queries via semantic layer (100% accurate)
+    - **Path D** — Multi-object queries via Ontology traversal
     - **Path B** — Exploratory queries via Text-to-SQL + RAG
     - **Path C** — Metadata Q&A via dbt docs
     """)
@@ -41,13 +43,19 @@ with st.sidebar:
     samples = [
         ("Metric", "上月营收是多少？"),
         ("Metric + Dim", "每个品类的销售额"),
-        ("Metric + Time", "过去一周每天的订单数"),
+        ("Ontology", "North仓库有哪些商品需要补货？"),
         ("Exploratory", "哪个城市的客户平均客单价最高？"),
         ("Metadata", "revenue 指标是怎么计算的？"),
     ]
     for path, q in samples:
         if st.button(f"[{path}] {q}", key=f"sample_{q}"):
             st.session_state.pending_question = q
+
+    st.divider()
+
+    # Ontology explorer
+    onto = fetch_ontology()
+    render_ontology(onto)
 
     st.divider()
     st.caption("Backend: http://localhost:8000")

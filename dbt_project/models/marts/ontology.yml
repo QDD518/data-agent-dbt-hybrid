@@ -1,0 +1,384 @@
+# Ontology Definition — Palantir-inspired business domain model
+# Each Object Type maps to an underlying dbt model (table).
+# Link Types encode explicit join semantics between Object Types.
+# Properties are the selectable, filterable, aggregatable columns.
+version: 1
+
+object_types:
+  # ── Order ──
+  - name: Order
+    description: "A customer purchase transaction. Each row is one order line."
+    display_name: "订单"
+    icon: "shopping-cart"
+    color: "#4A90D9"
+    primary_key: order_id
+    table: "analytics_analytics.fact_orders"
+    time_dimension: order_date
+    properties:
+      - name: order_id
+        type: String
+        description: "Unique order identifier"
+      - name: order_date
+        type: Date
+        description: "Date the order was placed"
+      - name: status
+        type: String
+        description: "Order status: Completed, Returned, Cancelled"
+      - name: quantity
+        type: Numeric
+        description: "Number of units purchased"
+      - name: unit_price
+        type: Numeric
+        description: "Selling price per unit (CNY)"
+      - name: discount_pct
+        type: Numeric
+        description: "Discount percentage"
+      - name: net_amount
+        type: Numeric
+        description: "Net revenue after discounts (CNY)"
+      - name: gross_amount
+        type: Numeric
+        description: "Gross revenue before discounts (CNY)"
+      - name: customer_id
+        type: String
+        description: "Foreign key to Customer"
+      - name: customer_name
+        type: String
+        description: "Customer full name (denormalized)"
+      - name: customer_segment
+        type: String
+        description: "Customer tier (denormalized)"
+      - name: customer_region
+        type: String
+        description: "Customer geographic region (denormalized)"
+      - name: customer_city
+        type: String
+        description: "Customer city (denormalized)"
+      - name: product_id
+        type: String
+        description: "Foreign key to Product"
+      - name: product_name
+        type: String
+        description: "Product display name (denormalized)"
+      - name: product_category
+        type: String
+        description: "Product top-level category (denormalized)"
+      - name: product_subcategory
+        type: String
+        description: "Product subcategory (denormalized)"
+
+  # ── Customer ──
+  - name: Customer
+    description: "A registered customer with demographic profile"
+    display_name: "客户"
+    icon: "user"
+    color: "#50C878"
+    primary_key: customer_id
+    table: "analytics_analytics.dim_customers"
+    time_dimension: registered_date
+    properties:
+      - name: customer_id
+        type: String
+        description: "Unique customer identifier"
+      - name: customer_name
+        type: String
+        description: "Customer full name"
+      - name: city
+        type: String
+        description: "Customer city"
+      - name: region
+        type: String
+        description: "Geographic region"
+      - name: country
+        type: String
+        description: "Customer country"
+      - name: segment
+        type: String
+        description: "Customer tier: Premium / Standard"
+      - name: registered_date
+        type: Date
+        description: "Registration date"
+
+  # ── Product ──
+  - name: Product
+    description: "A product in the catalog with pricing data"
+    display_name: "商品"
+    icon: "package"
+    color: "#F5A623"
+    primary_key: product_id
+    table: "analytics_analytics.dim_products"
+    properties:
+      - name: product_id
+        type: String
+        description: "Unique product identifier"
+      - name: product_name
+        type: String
+        description: "Product display name"
+      - name: category
+        type: String
+        description: "Product category"
+      - name: subcategory
+        type: String
+        description: "Product subcategory"
+      - name: cost_price
+        type: Numeric
+        description: "Cost price (CNY)"
+      - name: list_price
+        type: Numeric
+        description: "List price (CNY)"
+      - name: margin
+        type: Numeric
+        description: "Unit margin (CNY)"
+      - name: margin_pct
+        type: Numeric
+        description: "Margin percentage"
+
+  # ── Warehouse ──
+  # Columns are denormalized into fact_inventory — no separate dim table.
+  - name: Warehouse
+    description: "A physical storage location"
+    display_name: "仓库"
+    icon: "building"
+    color: "#8B5CF6"
+    primary_key: warehouse_id
+    table: "analytics_analytics.fact_inventory"
+    properties:
+      - name: warehouse_id
+        type: String
+        description: "Unique warehouse identifier"
+      - name: warehouse_name
+        type: String
+        description: "Warehouse display name"
+      - name: warehouse_city
+        type: String
+        description: "Warehouse city"
+      - name: warehouse_region
+        type: String
+        description: "Geographic region"
+      - name: warehouse_size
+        type: String
+        description: "Capacity tier: Large, Medium, Small"
+
+  # ── InventoryRecord ──
+  - name: InventoryRecord
+    description: "Stock level record for a product at a specific warehouse"
+    display_name: "库存记录"
+    icon: "clipboard-list"
+    color: "#E74C3C"
+    primary_key: inventory_id
+    table: "analytics_analytics.fact_inventory"
+    time_dimension: last_restock_date
+    properties:
+      - name: inventory_id
+        type: String
+        description: "Unique inventory record identifier"
+      - name: product_id
+        type: String
+        description: "Foreign key to Product"
+      - name: warehouse_id
+        type: String
+        description: "Foreign key to Warehouse (denormalized)"
+      - name: quantity_on_hand
+        type: Numeric
+        description: "Current stock quantity"
+      - name: reorder_point
+        type: Numeric
+        description: "Minimum stock level before reorder"
+      - name: needs_reorder
+        type: Boolean
+        description: "True if stock is below reorder point"
+      - name: is_out_of_stock
+        type: Boolean
+        description: "True if quantity is zero"
+      - name: inventory_value
+        type: Numeric
+        description: "Total inventory value (quantity * cost) in CNY"
+      - name: days_since_restock
+        type: Numeric
+        description: "Days since last inventory replenishment"
+      - name: last_restock_date
+        type: Date
+        description: "Date of last replenishment"
+
+  # ── CampaignResult ──
+  - name: CampaignResult
+    description: "Daily performance metrics for a marketing campaign"
+    display_name: "活动结果"
+    icon: "chart-bar"
+    color: "#2ECC71"
+    primary_key: result_id
+    table: "analytics_analytics.fact_marketing"
+    time_dimension: date
+    properties:
+      - name: result_id
+        type: String
+        description: "Unique campaign result record"
+      - name: campaign_id
+        type: String
+        description: "Foreign key to Campaign (denormalized)"
+      - name: date
+        type: Date
+        description: "Performance date"
+      - name: impressions
+        type: Numeric
+        description: "Number of ad impressions"
+      - name: clicks
+        type: Numeric
+        description: "Number of clicks"
+      - name: conversions
+        type: Numeric
+        description: "Number of conversions"
+      - name: cost
+        type: Numeric
+        description: "Daily ad spend (CNY)"
+      - name: revenue_generated
+        type: Numeric
+        description: "Revenue attributed to campaign"
+      - name: net_profit
+        type: Numeric
+        description: "Net profit after ad spend"
+      - name: ctr
+        type: Numeric
+        description: "Click-through rate"
+      - name: conversion_rate
+        type: Numeric
+        description: "Conversion rate"
+      - name: roas
+        type: Numeric
+        description: "Return on Ad Spend"
+      - name: cpa
+        type: Numeric
+        description: "Cost per Acquisition"
+
+  # ── Campaign ──
+  # Campaign attributes are denormalized into fact_marketing — same table as CampaignResult.
+  - name: Campaign
+    description: "A marketing campaign with channel and type metadata"
+    display_name: "营销活动"
+    icon: "megaphone"
+    color: "#E67E22"
+    primary_key: campaign_id
+    table: "analytics_analytics.fact_marketing"
+    properties:
+      - name: campaign_id
+        type: String
+        description: "Unique campaign identifier"
+      - name: campaign_name
+        type: String
+        description: "Campaign display name"
+      - name: channel
+        type: String
+        description: "Marketing channel"
+      - name: campaign_type
+        type: String
+        description: "Campaign type: Promotion, Mega Sale, etc."
+      - name: target_audience
+        type: String
+        description: "Target audience segment"
+      - name: budget
+        type: Numeric
+        description: "Total campaign budget"
+
+  # ── RFMCustomer ──
+  - name: RFMCustomer
+    description: "Customer RFM segmentation with recency, frequency, monetary scores"
+    display_name: "RFM客户"
+    icon: "star"
+    color: "#9B59B6"
+    primary_key: customer_id
+    table: "analytics_analytics.dim_customers_rfm"
+    time_dimension: last_order_date
+    properties:
+      - name: customer_id
+        type: String
+        description: "Customer identifier"
+      - name: recency_days
+        type: Numeric
+        description: "Days since last purchase"
+      - name: frequency
+        type: Numeric
+        description: "Number of distinct orders"
+      - name: monetary
+        type: Numeric
+        description: "Total spend (CNY)"
+      - name: avg_order_value
+        type: Numeric
+        description: "Average order value (CNY)"
+      - name: rfm_segment
+        type: String
+        description: "RFM segment label"
+      - name: rfm_total
+        type: Numeric
+        description: "Combined RFM score (3-15)"
+      - name: region
+        type: String
+        description: "Customer region"
+      - name: city
+        type: String
+        description: "Customer city"
+      - name: last_order_date
+        type: Date
+        description: "Date of most recent order"
+
+link_types:
+  # Order → Customer
+  - name: placed_by
+    description: "Order was placed by a Customer"
+    source: Order
+    target: Customer
+    join_key:
+      source_column: customer_id
+      target_column: customer_id
+    cardinality: many_to_one
+
+  # Order → Product
+  - name: contains
+    description: "Order line item contains a Product"
+    source: Order
+    target: Product
+    join_key:
+      source_column: product_id
+      target_column: product_id
+    cardinality: many_to_one
+
+  # InventoryRecord → Product
+  - name: tracks
+    description: "Inventory record tracks stock of a Product"
+    source: InventoryRecord
+    target: Product
+    join_key:
+      source_column: product_id
+      target_column: product_id
+    cardinality: many_to_one
+
+  # InventoryRecord → Warehouse (DENORMALIZED — same table)
+  - name: stored_in
+    description: "Inventory is stored in a Warehouse. Warehouse columns are on the same table — no JOIN needed."
+    source: InventoryRecord
+    target: Warehouse
+    join_key:
+      source_column: warehouse_id
+      target_column: warehouse_id
+    cardinality: many_to_one
+    denormalized: true
+
+  # CampaignResult → Campaign (DENORMALIZED — same table)
+  - name: measures_performance_of
+    description: "Marketing result measures a Campaign. Campaign columns are on the same table — no JOIN needed."
+    source: CampaignResult
+    target: Campaign
+    join_key:
+      source_column: campaign_id
+      target_column: campaign_id
+    cardinality: many_to_one
+    denormalized: true
+
+  # Order → RFMCustomer
+  - name: ordered_by_rfm
+    description: "Order was placed by an RFM-segmented Customer"
+    source: Order
+    target: RFMCustomer
+    join_key:
+      source_column: customer_id
+      target_column: customer_id
+    cardinality: many_to_one

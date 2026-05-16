@@ -1,16 +1,23 @@
-"""Chat Orchestrator — routes user questions through Path A/B/C, streams SSE events."""
+"""Chat Orchestrator — routes user questions through Path A/B/C/D, streams SSE events."""
 
 import asyncio
 import json
 from typing import AsyncGenerator
 
 from backend.agent.router import classify_intent
-from backend.semantic.query_builder import MetricQueryBuilder, SemanticQuery
+from backend.semantic.query_builder import MetricQueryBuilder, SemanticQuery, CrossModelQueryError
 from backend.sql.generator import generate_sql
 from backend.sql.executor import execute_sql
 from backend.sql.security import SQLSecurityError
 from backend.rag.retriever import retrieve_context
 from backend.llm.client import chat
+from backend.ontology.parser import load_ontology
+from backend.ontology.traversal import (
+    GraphTraverser,
+    TraversalRequest,
+    TraversalStep,
+    FilterClause,
+)
 
 
 def _sse(event_type: str, data: dict) -> str:
@@ -31,6 +38,10 @@ async def process_message(message: str) -> AsyncGenerator[str, None]:
     # ── Phase 2: Execute by path ──
     if path == "metric_query":
         async for event in _handle_path_a(intent):
+            yield event
+
+    elif path == "ontology_query":
+        async for event in _handle_path_d(intent, message):
             yield event
 
     elif path == "exploratory":
@@ -64,6 +75,12 @@ async def _handle_path_a(intent: dict) -> AsyncGenerator[str, None]:
     try:
         builder = MetricQueryBuilder()
         sql = await loop.run_in_executor(None, builder.build_sql, query)
+    except CrossModelQueryError as e:
+        # Fallback: try ontology traversal for cross-model queries
+        yield _sse("status", {"stage": "cross_model_fallback", "message": "Cross-model query detected, routing through ontology..."})
+        async for event in _handle_path_a_ontology_fallback(intent, e):
+            yield event
+        return
     except ValueError as e:
         yield _sse("error", {"message": str(e)})
         return
@@ -168,6 +185,170 @@ async def _handle_path_c(message: str) -> AsyncGenerator[str, None]:
     )
 
     yield _sse("done", {"answer": response, "sources": context_docs[:3]})
+
+
+# ── Path D: Ontology traversal ──
+
+
+async def _handle_path_d(intent: dict, message: str) -> AsyncGenerator[str, None]:
+    """Path D: Ontology graph traversal for multi-object queries."""
+    yield _sse("status", {"stage": "traversing", "message": "Analyzing object relationships..."})
+
+    loop = asyncio.get_running_loop()
+    store = load_ontology()
+    traverser = GraphTraverser(store)
+
+    start_object = intent.get("start_object", "")
+    if not start_object or start_object not in store.object_by_name:
+        yield _sse("error", {"message": f"Unknown start object: {start_object}. Available: {list(store.object_by_name.keys())}"})
+        return
+
+    # Build TraversalRequest from router intent
+    try:
+        request = await loop.run_in_executor(
+            None, _build_ontology_request, intent, store
+        )
+        sql = await loop.run_in_executor(None, traverser.build_sql, request)
+    except ValueError as e:
+        yield _sse("error", {"message": str(e)})
+        return
+
+    yield _sse("sql", {"sql": sql})
+
+    # Execute
+    yield _sse("status", {"stage": "executing", "message": "Running query..."})
+    try:
+        result = await loop.run_in_executor(None, execute_sql, sql)
+    except SQLSecurityError as e:
+        yield _sse("error", {"message": f"SQL rejected: {e}"})
+        return
+    except Exception as e:
+        yield _sse("error", {"message": f"Query failed: {e}"})
+        return
+
+    yield _sse("result", {
+        "columns": result.columns,
+        "rows": result.rows,
+        "row_count": result.row_count,
+        "elapsed_ms": result.elapsed_ms,
+        "truncated": result.truncated,
+    })
+
+    # Interpret
+    yield _sse("status", {"stage": "interpreting", "message": "Generating summary..."})
+    interpretation = await _interpret_results(message=message, result=result)
+    yield _sse("done", {"summary": interpretation})
+
+
+async def _handle_path_a_ontology_fallback(intent: dict, error: CrossModelQueryError) -> AsyncGenerator[str, None]:
+    """Path A fallback: cross-model metric query resolved via ontology traversal."""
+    loop = asyncio.get_running_loop()
+    store = load_ontology()
+    traverser = GraphTraverser(store)
+
+    # Determine start object from the first metric's model
+    metric_names = intent.get("metric_names", [])
+    dimensions = intent.get("dimensions", [])
+    time_range = intent.get("time_range")
+
+    # Find which semantic model each metric is on
+    builder = MetricQueryBuilder()
+    metric_models = {}
+    for m_name in metric_names:
+        md = builder._metric_index.get(m_name)
+        if md:
+            model_name = builder._metric_model.get(m_name)
+            metric_models[model_name] = md
+
+    if not metric_models:
+        yield _sse("error", {"message": "Unable to resolve metrics to ontology objects."})
+        return
+
+    # Use the first metric's model as the start object
+    # Map semantic model names to object type names
+    model_to_object = {
+        "orders": "Order",
+        "customers": "Customer",
+        "inventory": "InventoryRecord",
+        "marketing": "CampaignResult",
+        "customers_rfm": "RFMCustomer",
+    }
+
+    first_model = list(metric_models.keys())[0]
+    start_object = model_to_object.get(first_model, first_model)
+
+    # Build request with aggregates from metrics
+    aggregates = []
+    for md in metric_models.values():
+        aggregates.append(AggregateDef(md.agg.upper(), md.expr, md.name))
+
+    request = TraversalRequest(
+        start_object=start_object,
+        properties=dimensions if dimensions else [],
+        aggregates=aggregates,
+        time_range=time_range,
+    )
+
+    try:
+        sql = await loop.run_in_executor(None, traverser.build_sql, request)
+    except ValueError as e:
+        yield _sse("error", {"message": str(e)})
+        return
+
+    yield _sse("sql", {"sql": sql})
+
+    # Execute
+    yield _sse("status", {"stage": "executing", "message": "Running query..."})
+    try:
+        result = await loop.run_in_executor(None, execute_sql, sql)
+    except SQLSecurityError as e:
+        yield _sse("error", {"message": f"SQL rejected: {e}"})
+        return
+    except Exception as e:
+        yield _sse("error", {"message": f"Query failed: {e}"})
+        return
+
+    yield _sse("result", {
+        "columns": result.columns,
+        "rows": result.rows,
+        "row_count": result.row_count,
+        "elapsed_ms": result.elapsed_ms,
+        "truncated": result.truncated,
+    })
+
+    # Interpret
+    yield _sse("status", {"stage": "interpreting", "message": "Generating summary..."})
+    interpretation = await _interpret_results(message="", result=result)
+    yield _sse("done", {"summary": interpretation})
+
+
+def _build_ontology_request(intent: dict, store) -> TraversalRequest:
+    """Convert router intent dict into a TraversalRequest."""
+    start_object = intent.get("start_object", "")
+    time_range = intent.get("time_range")
+    properties = intent.get("properties", [])
+    filters_raw = intent.get("filters", [])
+
+    # Parse filters
+    filters = []
+    for f in filters_raw:
+        if isinstance(f, dict):
+            filters.append(FilterClause(
+                property_name=f.get("property", ""),
+                operator=f.get("op", "eq"),
+                value=f.get("value"),
+            ))
+
+    # If start_object has foreign entities, traverse to get enriched properties
+    # For now, use the start object directly (single-object query from ontology)
+    request = TraversalRequest(
+        start_object=start_object,
+        properties=properties,
+        filters=filters,
+        time_range=time_range,
+    )
+
+    return request
 
 
 _INTERPRET_PROMPT = """You are a data analyst. Summarize the query results for the user.
