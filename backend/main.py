@@ -50,10 +50,12 @@ app.add_middleware(
 from backend.api.health import router as health_router
 from backend.api.chat import router as chat_router
 from backend.api.ontology import router as ontology_router
+from backend.api.metadata import router as metadata_router
 
 app.include_router(health_router)
 app.include_router(chat_router)
 app.include_router(ontology_router)
+app.include_router(metadata_router)
 
 
 if __name__ == "__main__":

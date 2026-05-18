@@ -16,7 +16,9 @@ def stream_chat(message: str) -> Generator[dict, None, None]:
             f"{BACKEND_URL}/api/chat",
             json={"message": message, "conversation_id": None},
         ) as response:
-            response.raise_for_status()
+            if response.status_code >= 400:
+                yield {"type": "error", "message": f"Backend error ({response.status_code}): {response.text[:200]}"}
+                return
             for line in response.iter_lines():
                 if line.startswith("data: "):
                     data_str = line[len("data: "):]
@@ -31,6 +33,17 @@ def fetch_ontology() -> dict | None:
     try:
         with httpx.Client(timeout=10, trust_env=False) as client:
             resp = client.get(f"{BACKEND_URL}/api/ontology")
+            resp.raise_for_status()
+            return resp.json()
+    except Exception:
+        return None
+
+
+def fetch_metadata() -> dict | None:
+    """Fetch full metadata (models, metrics, semantic models, ontology) from the backend."""
+    try:
+        with httpx.Client(timeout=15, trust_env=False) as client:
+            resp = client.get(f"{BACKEND_URL}/api/metadata")
             resp.raise_for_status()
             return resp.json()
     except Exception:
