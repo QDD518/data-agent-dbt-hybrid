@@ -45,6 +45,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      dbt-setup:
+        condition: service_completed_successfully
     networks:
       - chatbi-net
     restart: unless-stopped
@@ -64,7 +66,7 @@ services:
       - chatbi-net
     restart: unless-stopped
 
-  # Optional: run dbt models after postgres is ready
+  # Build dbt models and the semantic registry before the API becomes ready.
   dbt-setup:
     build:
       context: .
@@ -75,7 +77,8 @@ services:
         cd dbt_project &&
         dbt seed &&
         dbt run &&
-        dbt parse
+        dbt parse &&
+        python ../scripts/build_semantic_registry.py
       "
     environment:
       POSTGRES_HOST: postgres
@@ -93,8 +96,7 @@ services:
         condition: service_healthy
     networks:
       - chatbi-net
-    profiles:
-      - setup  # Only runs with: docker-compose --profile setup up
+    restart: "no"
 
 volumes:
   postgres_data:

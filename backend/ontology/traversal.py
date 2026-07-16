@@ -235,15 +235,20 @@ class GraphTraverser:
 
         # Build CTE for the start object
         col_names = start_obj.column_names()
+        required_join_columns = {
+            step.link.source_column
+            for step in request.path
+            if step.link.source == request.start_object and not step.link.denormalized
+        }
         cte_defs.append({
             "name": current_alias,
             "object": start_obj,
             "alias": current_alias,
-            "select_cols": [start_obj.primary_key] + [
+            "select_cols": list(dict.fromkeys([start_obj.primary_key, *required_join_columns] + [
                 p for p in request.properties or col_names
                 if p in col_names
-            ],
-            "filters": [],
+            ])),
+            "filters": list(request.filters),
         })
 
         cte_idx = 1
@@ -270,7 +275,7 @@ class GraphTraverser:
             cte_idx += 1
 
             target_cols = target_obj.column_names()
-            select_cols = [target_obj.primary_key]
+            select_cols = list(dict.fromkeys([target_obj.primary_key, link.target_column]))
             for p in step.select_properties:
                 if p in target_cols and p not in select_cols:
                     select_cols.append(p)
@@ -353,7 +358,13 @@ class GraphTraverser:
 
         # FROM: first CTE
         first_alias = cte_defs[0]["alias"]
-        sql_parts.append(f"FROM {cte_defs[0]['object'].table} AS {first_alias}")
+        # CTE filters and projected join keys are meaningful only when the CTE
+        # itself is used as the source. The previous implementation selected
+        # directly from the physical table, silently discarding those filters.
+        if len(cte_defs) > 1:
+            sql_parts.append(f"FROM {cte_defs[0]['name']} AS {first_alias}")
+        else:
+            sql_parts.append(f"FROM {cte_defs[0]['object'].table} AS {first_alias}")
 
         # JOINs
         for j in join_chain:
@@ -375,7 +386,11 @@ class GraphTraverser:
         # Apply request-level filters
         if request.filters:
             prefix = "WHERE" if "WHERE" not in "\n".join(sql_parts[-2:]) else "AND"
-            filter_strs = [_filter_to_sql(f) for f in request.filters]
+            # Root filters already live in c0 for CTE queries. They are still
+            # emitted for single-object requests, qualified for unambiguous SQL.
+            filter_strs = [] if len(cte_defs) > 1 else [_filter_to_sql(f, first_alias) for f in request.filters]
+            if not filter_strs:
+                return "\n".join(sql_parts + [f"LIMIT {request.limit}"])
             sql_parts.append(f"{prefix} " + "\n  AND ".join(filter_strs))
 
         sql_parts.append(f"LIMIT {request.limit}")

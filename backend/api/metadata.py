@@ -4,6 +4,7 @@ from fastapi import APIRouter
 
 from backend.metadata.parser import load_metadata
 from backend.ontology.parser import load_ontology
+from backend.semantic.registry import load_registry
 
 router = APIRouter(tags=["metadata"])
 
@@ -13,6 +14,7 @@ async def get_metadata():
     """Return combined metadata: dbt models + metrics + semantic models + ontology graph."""
     meta = load_metadata()
     onto = load_ontology()
+    registry = load_registry()
 
     models = []
     for m in meta.models:
@@ -56,4 +58,5 @@ async def get_metadata():
         "metrics": metrics,
         "semantic_models": semantic_models,
         "ontology": onto.to_graph_dict(),
+        "semantic_registry": registry.to_dict(),
     }

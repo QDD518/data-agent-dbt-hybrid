@@ -1,333 +1,310 @@
-# Architecture: Data Agent — dbt Hybrid
+# Architecture: dbt + Ontology + QueryPlan
 
-## Overview
+## 1. Problem statement
 
-Data Agent is a Chat BI system with a **four-path hybrid architecture** that combines dbt Semantic Layer with Palantir-inspired Ontology graph traversal. Rather than using one monolithic Text-to-SQL pipeline, it routes each user question to one of four specialized paths.
+Natural-language analytics has two different failure modes:
 
-## Core Principle: dbt + Ontology
+1. **Semantic errors**: the answer uses the wrong metric formula, time field,
+   table grain, or business definition.
+2. **Relational errors**: the query invents a join, traverses it in the wrong
+   direction, or multiplies facts through a fan-out.
 
-The system has two conceptual layers on top of PostgreSQL:
+Giving raw schemas to an LLM does not solve either problem reliably. This
+project treats the LLM as a constrained planner and moves semantic validation
+and SQL generation into deterministic application code.
 
-```
-┌──────────────────────────────────────────────────────────────────┐
-│                     Ontology (Business Graph)                     │
-│   8 Object Types · 6 Link Types · Graph Traversal · Path D       │
-│   Models the business as objects connected by named links         │
-└────────────────────────────┬─────────────────────────────────────┘
-                             │ maps to
-┌────────────────────────────▼─────────────────────────────────────┐
-│                  dbt Semantic Layer (Physical)                    │
-│   5 Semantic Models · 28 Metrics · MetricQueryBuilder · Path A   │
-│   Models the data as measures + dimensions on tables              │
-└────────────────────────────┬─────────────────────────────────────┘
-                             │ queries
-┌────────────────────────────▼─────────────────────────────────────┐
-│                     PostgreSQL (CHATBI_DEMO)                      │
-│   17 dbt Models (OBT wide tables) · 8 Seeds                       │
-└──────────────────────────────────────────────────────────────────┘
-```
+## 2. Design principles
 
-**dbt's role**: Manages physical data — table definitions, column types, metric formulas, seed data. The source of truth for schema.
+| Principle | Consequence |
+|---|---|
+| dbt remains the physical and metric authority | Runtime metadata is built from dbt artifacts, not handwritten SQL prompts |
+| Ontology is an overlay, not another warehouse model | It adds entities, relationships, cardinality, aliases, and presentation metadata |
+| Plans are data; SQL is a compiled artifact | The LLM returns JSON `QueryPlan`, never executable SQL |
+| Validate before compiling | Identifiers, paths, properties, filters, and time ranges are checked against a Registry |
+| Prefer explicit limits over plausible guesses | Unsupported cross-model dimensional analysis is rejected instead of silently fan-out joining |
 
-**Ontology's role**: Models business logic — objects (Order, Product, Warehouse) and their relationships (placed_by, tracks, stored_in). The graph for traversal queries.
+## 3. System context
 
-## Four-Path Architecture
+```mermaid
+flowchart TB
+  subgraph Authoring["Data authoring"]
+    DBT["dbt models, semantic models, metrics"]
+    ONTO["ontology.yml overlay"]
+  end
 
-```
-               ┌──────────────────────────────┐
-               │     User Question (NL)        │
-               └──────────────┬───────────────┘
-                              │
-                              ▼
-               ┌──────────────────────────────┐
-               │      Intent Router (LLM)      │
-               │ metric / ontology / explor /  │
-               │ metadata                      │
-               └──┬──────────┬────────┬───────┘
-                  │          │        │         │
-     ┌────────────┘  ┌───────┘        │         └──────────┐
-     ▼               ▼                ▼                     ▼
-┌──────────┐  ┌─────────────┐  ┌───────────┐  ┌──────────────────┐
-│  Path A   │  │  Path D      │  │  Path B    │  │  Path C          │
-│  Metric   │  │  Ontology    │  │  Text-to-  │  │  Metadata Q&A    │
-│  Query    │  │  Traversal   │  │  SQL       │  │                  │
-│           │  │              │  │            │  │  dbt Docs →       │
-│  Metrics  │  │  Object      │  │  LLM + dbt │  │  Direct Answer   │
-│  → Single │  │  Graph →     │  │  Schema +  │  │  + Sources        │
-│  table    │  │  CTE chain   │  │  Ontology   │  │                  │
-│  SQL      │  │  SQL         │  │  → ad-hoc   │  │                  │
-└─────┬─────┘  └──────┬───────┘  └─────┬──────┘  └────────┬─────────┘
-      │               │                │                   │
-      └───────────────┴────────────────┴───────────────────┘
-                              │
-                              ▼
-               ┌──────────────────────────────┐
-               │      SQL Security Layer       │
-               │  Keyword blocklist, SELECT-only│
-               └──────────────┬───────────────┘
-                              ▼
-               ┌──────────────────────────────┐
-               │        SQL Executor           │
-               │  Read-only, timeout, row limit│
-               └──────────────┬───────────────┘
-                              ▼
-               ┌──────────────────────────────┐
-               │     NL Interpreter (LLM)      │
-               │  Summary + Chart + Insight    │
-               └──────────────┬───────────────┘
-                              ▼
-               ┌──────────────────────────────┐
-               │        SSE Streaming          │
-               │  classify → SQL → exec → done │
-               └──────────────────────────────┘
+  subgraph Build["Build-time artifacts"]
+    MAN["manifest.json"]
+    SMAN["semantic_manifest.json"]
+    REG["semantic_registry.json"]
+  end
+
+  subgraph Runtime["Data Agent runtime"]
+    API["FastAPI / SSE"]
+    ROUTER["Intent router"]
+    PLANNER["Typed QueryPlan planner"]
+    VALIDATOR["Registry validator"]
+    COMPILER["Deterministic SQL compiler"]
+    EXEC["Read-only PostgreSQL executor"]
+  end
+
+  DBT --> MAN
+  DBT --> SMAN
+  MAN --> REG
+  SMAN --> REG
+  ONTO --> REG
+  API --> ROUTER --> PLANNER --> VALIDATOR --> COMPILER --> EXEC
+  REG --> PLANNER
+  REG --> VALIDATOR
+  EXEC --> API
 ```
 
-## Path A — Metric Query (Deterministic, Single-Table)
+The persisted registry artifact is primarily for inspection and deployment
+visibility. At runtime the service rebuilds the in-memory Registry from current
+dbt metadata plus the ontology overlay, so startup detects contract drift.
 
-**Strategy**: Use dbt semantic layer metadata to generate SQL with zero hallucination.
+## 4. Semantic sources and ownership
 
-**Flow**:
-1. Intent Router extracts metric names + dimensions + time_range from NL
-2. `MetricQueryBuilder` reads `semantic_manifest.json` (generated by `dbt parse`)
-3. Resolves: metric → measure → semantic model → table → column
-4. Generates: `SELECT agg(expr) FROM table WHERE filter GROUP BY dim`
-5. No LLM involved in SQL generation → 100% deterministic
+### dbt owns
 
-**dbt's role**: Provides structured metric definitions (YAML) and generates `semantic_manifest.json`
+- physical relations, source-to-mart transformations, and table grain;
+- semantic models, dimensions, measures, metrics, and default time dimensions;
+- model tests and generated manifests;
+- metric filters and Data Agent metric extensions stored as dbt `config.meta`.
 
-**Example**:
-```
-User: "上月营收是多少？"
-  → Path A: {metric: total_revenue, time_range: last_month}
-  → SQL: SELECT SUM(net_amount) AS total_revenue
-          FROM analytics_analytics.fact_orders
-          WHERE order_date >= date_trunc('month', CURRENT_DATE) - interval '1 month'
-          ORDER BY 1 DESC
-```
+### Ontology owns
 
-## Path D — Ontology Graph Traversal (Deterministic, Multi-Hop)
+- business-facing object types such as `Order`, `Product`, and
+  `InventoryRecord`;
+- property names and explicit physical-column mappings;
+- relationship names, join keys, cardinality, and denormalization markers;
+- descriptions and UI metadata.
 
-**Strategy**: Traverse the business object graph to generate CTE-chain SQL for multi-object questions.
+An ontology object does not need to duplicate a physical model. For example,
+`InventoryRecord` and `Warehouse` can refer to one denormalized inventory mart.
+The `stored_in` relationship records that this is a semantic relationship but
+not a physical join.
 
-**Flow**:
-1. Intent Router classifies as `ontology_query`, extracts start_object, properties, filters
-2. `GraphTraverser` reads `ontology.yml` and reconstructs the business graph
-3. For each non-denormalized hop: creates a CTE selecting target columns with filters
-4. Denormalized hops: merges target columns into source CTE (no JOIN needed)
-5. Final SELECT joins CTEs through primary/foreign key chains
+## 5. Semantic Registry
 
-**Ontology's role**: Models the business as Object Types connected by Link Types. Each Object Type maps to a dbt table. Denormalized links detect when two objects share the same table — avoiding wasteful self-JOINs.
+`backend/semantic/registry.py` creates the canonical in-memory contract.
 
-**Example**:
-```
-User: "North仓库有哪些商品需要补货？"
-  → Path D: {start_object: InventoryRecord,
-             filters: [{property: warehouse_region, op: eq, value: North},
-                       {property: needs_reorder, op: eq, value: true}],
-             properties: [product_name, warehouse_name]}
-  → SQL: SELECT product_name, warehouse_name
-          FROM analytics_analytics.fact_inventory
-          WHERE warehouse_region = 'North' AND needs_reorder = TRUE
-  → Result: 4K Monitor 27-inch (北京顺义仓), Sony WH-1000XM5 (北京顺义仓)
+```mermaid
+flowchart LR
+  M["dbt manifest\nmodels + columns"] --> R["SemanticRegistry"]
+  S["dbt semantic manifest\nmetrics + dimensions + measures"] --> R
+  O["Ontology\nentities + relationships"] --> R
+  R --> P["QueryPlan validation"]
+  R --> C["SQL compilation"]
+  R --> Q["Metadata API / retrieval"]
 ```
 
-For queries that need actual joins (e.g., Order → Customer):
-```
-User: "Completed orders with customer segment"
-  → Path D: {start_object: Order,
-             path: [{link: placed_by, target: Customer, select: [segment]}],
-             filters: [{property: status, op: eq, value: Completed}]}
-  → SQL: WITH
-           c0 AS (SELECT order_id, customer_id, net_amount
-                  FROM analytics_analytics.fact_orders WHERE status = 'Completed'),
-           c1 AS (SELECT customer_id, segment
-                  FROM analytics_analytics.dim_customers)
-         SELECT c0.order_id, c0.net_amount, c1.segment
-         FROM analytics_analytics.fact_orders AS c0
-         JOIN c1 ON c0.customer_id = c1.customer_id
+Registry validation fails fast when an ontology relation, property, primary key,
+time dimension, or join key no longer exists in dbt metadata. It also supports a
+business-property-to-physical-column mapping. This prevents common drift such as
+describing `customer_city` while the mart column is physically named `city`.
+
+The build command is:
+
+```powershell
+dbt parse
+..\venv\Scripts\python.exe ..\scripts\build_semantic_registry.py
 ```
 
-### Cross-Model Fallback (Path A → D)
+See [semantic-registry.md](semantic-registry.md) for the operational reference.
 
-When Path A detects metrics spanning multiple semantic models, it raises `CrossModelQueryError`. The orchestrator catches this and falls back to ontology traversal — mapping metric names to Object Types and building aggregate CTE queries automatically.
+## 6. QueryPlan contract
 
-## Path B — Exploratory Text-to-SQL (LLM + RAG)
+The runtime accepts three discriminated Pydantic plans.
 
-**Strategy**: Use LLM + dbt schema context + ontology join guidance for ad-hoc questions.
+### Metric analysis
 
-**Flow**:
-1. Keyword retriever finds relevant dbt model documentation AND ontology object/link documents
-2. dbt metadata (table names, column names, descriptions) is injected as RAG context
-3. Ontology graph (Object Types with their tables and outbound links) provides explicit join-path guidance
-4. LLM generates a SELECT query grounded in the actual schema and valid relationships
-5. SQL passes through security layer before execution
-
-**dbt + Ontology's role**: dbt provides ground-truth schema; Ontology tells the LLM which JOINs are valid (e.g., "Order links to Customer via customer_id — `placed_by`")
-
-**Example**:
-```
-User: "哪个城市的客户平均客单价最高？"
-  → RAG retrieves: fact_orders columns + Ontology "Order → Customer via placed_by"
-  → LLM generates: SELECT city, AVG(net_amount) AS avg_order_value
-                    FROM analytics_analytics.fact_orders
-                    GROUP BY city ORDER BY 2 DESC
+```json
+{
+  "mode": "metric_analysis",
+  "metrics": ["total_revenue"],
+  "dimensions": ["product_category"],
+  "filters": [],
+  "time_range": "last_month",
+  "limit": 1000
+}
 ```
 
-## Path C — Metadata Q&A
+Validation ensures that requested metrics belong to the same semantic model when
+dimensions or user filters are present. A scalar request can include metrics
+from several models, because each is safely pre-aggregated before being combined.
 
-**Strategy**: Direct RAG answer from dbt documentation + ontology context — no SQL.
+### Entity analysis
 
-**Flow**:
-1. Keyword retriever finds relevant dbt docs + ontology object/link descriptions
-2. LLM synthesizes an answer from the retrieved context
-3. Returns: natural language answer + source references
-
-**Example**:
-```
-User: "revenue 是怎么计算的？"
-  → RAG retrieves metrics.yml definition
-  → Answer: "revenue = SUM(net_amount)，数据源来自 fact_orders 表，已过滤 status = 'Completed'"
-```
-
-## Last-Mile Aggregation, Extended
-
-Path A keeps the original principle: **dbt models handle complex joins → single-table aggregation only.**
-
-Path D extends this: **when multiple objects are needed, the Ontology generates CTE chains explicitly, using only the join keys defined in Link Types.** The system never guesses JOINs — every join is pre-defined in `ontology.yml`.
-
-```
-Path A (single table):
-  SELECT SUM(quantity_on_hand) FROM analytics_analytics.fact_inventory
-
-Path D (multi-hop, CTE chain):
-  WITH c0 AS (SELECT order_id, customer_id, net_amount FROM fact_orders WHERE ...),
-       c1 AS (SELECT customer_id, segment FROM dim_customers)
-  SELECT c0.net_amount, c1.segment
-  FROM fact_orders AS c0 JOIN c1 ON c0.customer_id = c1.customer_id
+```json
+{
+  "mode": "entity_analysis",
+  "root_entity": "InventoryRecord",
+  "selections": [
+    {"entity": "InventoryRecord", "property": "quantity_on_hand"},
+    {"entity": "Product", "property": "product_name"}
+  ],
+  "relationships": [
+    {"relationship": "tracks", "from_entity": "InventoryRecord", "to_entity": "Product"}
+  ],
+  "filters": [
+    {"field": "needs_reorder", "operator": "eq", "value": true}
+  ]
+}
 ```
 
-### Denormalized Link Optimization
+Each relationship step must originate at an entity already present in the plan.
+Cycles, unknown properties, and properties outside the path are rejected.
+Legacy router output with unqualified properties is resolved to explicit entity
+selections before compilation; ambiguous names require a clearer plan.
 
-When two Object Types share the same physical dbt table (e.g., `InventoryRecord` and `Warehouse` both on `fact_inventory`), the `denormalized: true` flag in `ontology.yml` tells the traverser to skip the JOIN. Warehouse columns are selected directly from the fact table:
+### Metadata Q&A
 
-```
-Question: "哪些仓库有大容量库存？"
-  → InventoryRecord → Warehouse via stored_in (denormalized)
-  → SQL: SELECT warehouse_name, warehouse_size, quantity_on_hand
-          FROM analytics_analytics.fact_inventory
-          WHERE warehouse_size = 'Large'
-  → No JOIN generated — Warehouse columns are already on fact_inventory
-```
-
-## Ontology Design
-
-The ontology is defined in `dbt_project/models/marts/ontology.yml`, co-located with dbt's `semantic_models.yml` and `metrics.yml`. It uses three primitives inspired by Palantir Foundry:
-
-### Object Types (8)
-Each maps to a dbt model table. Defines: `name`, `display_name` (Chinese), `icon`/`color` (for frontend), `primary_key`, `table`, `time_dimension`, `properties` (typed: String/Numeric/Date/Boolean).
-
-| Object | dbt Table | Example Properties |
-|---|---|---|
-| Order | fact_orders | order_id, net_amount, status, customer_segment |
-| Customer | dim_customers | customer_id, customer_name, region, segment |
-| Product | dim_products | product_id, product_name, category, cost_price |
-| Warehouse | fact_inventory | warehouse_id, warehouse_name, warehouse_region, warehouse_size |
-| InventoryRecord | fact_inventory | inventory_id, quantity_on_hand, needs_reorder, days_since_restock |
-| CampaignResult | fact_marketing | result_id, impressions, clicks, conversions, roas |
-| Campaign | fact_marketing | campaign_id, campaign_name, channel, campaign_type |
-| RFMCustomer | dim_customers_rfm | customer_id, recency_days, frequency, rfm_segment |
-
-### Link Types (6)
-Named, directed edges with explicit join keys and cardinality. The `denormalized` flag prevents unnecessary self-JOINs.
-
-| Link | Source → Target | Join Key | Denormalized? |
-|---|---|---|---|
-| `placed_by` | Order → Customer | customer_id | No |
-| `contains` | Order → Product | product_id | No |
-| `tracks` | InventoryRecord → Product | product_id | No |
-| `stored_in` | InventoryRecord → Warehouse | warehouse_id | **Yes** |
-| `measures_performance_of` | CampaignResult → Campaign | campaign_id | **Yes** |
-| `ordered_by_rfm` | Order → RFMCustomer | customer_id | No |
-
-### GraphTraverser Engine
-
-```python
-# BFS path-finding between any two Object Types
-traverser.find_paths("InventoryRecord", "Customer", max_hops=3)
-
-# SQL generation via CTE chain
-request = TraversalRequest(
-    start_object="Order",
-    path=[TraversalStep(link=placed_by, select_properties=["segment"])],
-    filters=[FilterClause("status", "eq", "Completed")],
-)
-sql = traverser.build_sql(request)  # deterministic CTE SQL
+```json
+{
+  "mode": "metadata_qa",
+  "question": "How is total revenue calculated?"
+}
 ```
 
-Supports 12 filter operators (eq/neq/gt/gte/lt/lte/in/between/like/is_null/is_not_null), parameterized time resolution per object's `time_dimension`.
+This mode retrieves dbt and ontology documentation only. It does not execute a
+business-data query.
 
-## Intent Router
+## 7. Planning flow
 
-A lightweight LLM prompt classifies every question into one of four paths:
+```mermaid
+sequenceDiagram
+  participant User
+  participant Router
+  participant Planner
+  participant Registry
+  participant Compiler
+  participant DB
 
-| Question Pattern | Path | Example |
-|-----------------|------|---------|
-| Asks about predefined metrics | A | "上月营收多少？" |
-| Cross-entity / multi-object questions | D | "North仓库有哪些商品需要补货？" |
-| Ad-hoc/exploratory analysis | B | "哪个城市客单价最高？" |
-| Asks about definitions/data models | C | "revenue 怎么计算的？" |
-
-The router also extracts structured parameters:
-- **Path A**: metric_names, dimensions, time_range
-- **Path D**: start_object, properties, filters, time_range
-- **Path B/C**: raw message (LLM handles the rest)
-
-## RAG: Keyword-Based Retrieval (with Ontology Enrichment)
-
-We use **keyword overlap scoring** instead of embedding vectors because:
-- DeepSeek's embedding API is unavailable (returns 404)
-- For 36+ metadata documents (22 dbt + 14 ontology), keyword matching is fast and effective
-- CJK bigram tokenizer handles Chinese text well
-- No external embedding API costs
-
-**Document pool** (generated by `MetadataStore.to_rag_documents()`):
-- **22 dbt documents**: One per model (table columns), one per metric, one per semantic model
-- **14 ontology documents**: One per Object Type (properties + outbound links), one per Link Type (join key + cardinality + denormalized flag)
-
-Path B's prompt is enriched with a dedicated "Ontology Object Graph" section that tells the LLM exactly which JOINs are valid for each Object Type.
-
-## SQL Security
-
-Every SQL query (both Path A and Path B) passes through `validate_sql()`:
-- Keyword blocklist: INSERT, UPDATE, DELETE, DROP, TRUNCATE, etc.
-- Only SELECT / WITH allowed
-- Multi-statement blocked
-- Statement timeout + row limit enforced at the executor level
-- Read-only transaction mode on database connections
-
-## SSE Streaming
-
-The backend streams progress events via Server-Sent Events:
-
-```
-data: {"type":"status","stage":"classifying","message":"Analyzing..."}
-data: {"type":"status","stage":"classified","path":"metric_query",...}
-data: {"type":"status","stage":"building_sql","message":"Building..."}
-data: {"type":"sql","sql":"SELECT SUM(...)... "}
-data: {"type":"status","stage":"executing","message":"Running..."}
-data: {"type":"result","columns":[...],"rows":[...],...}
-data: {"type":"status","stage":"interpreting","message":"Generating..."}
-data: {"type":"done","summary":"..."}
+  User->>Router: Natural-language question
+  Router->>Planner: Intent + extracted candidates
+  Planner->>Registry: Resolve and validate identifiers
+  alt Deterministic intent
+    Planner-->>Compiler: Valid QueryPlan
+  else Exploratory intent
+    Planner->>Planner: LLM returns JSON QueryPlan
+    Planner->>Registry: Validate JSON plan
+    Planner-->>Compiler: Valid QueryPlan
+  end
+  Compiler->>DB: Read-only compiled SQL
+  DB-->>User: Result, SQL, explanation
 ```
 
-## Tech Stack Rationale
+The LLM fallback prompt contains Registry names, not arbitrary database schema
+instructions. If its response is raw SQL or invalid JSON, planning stops.
 
-| Decision | Choice | Why |
-|----------|--------|-----|
-| No MetricFlow PyPI | Custom SQL builder + GraphTraverser | metricflow package is dead; our builder handles single-table + CTE chains |
-| No graph database | In-memory YAML adjacency | 8 objects + 6 links is trivially fast in pure Python (BFS O(V+E)) |
-| No ChromaDB | Keyword retriever | Embedding API unavailable; 36 docs (22 dbt + 14 ontology) is small enough |
-| No LangChain | Custom orchestrator | Avoids abstraction overhead; 4 paths in ~300 lines of custom code |
-| No dbt Cloud | dbt OSS + custom parser | dbt Cloud's query engine is paid; we fill the gap with our own SQL generation |
-| PostgreSQL sync | SQLAlchemy sync engine | Simpler than async for read-only OLAP queries |
-| Streamlit | Frontend | Fast prototype; ontology explorer rendered as expandable cards in sidebar |
+## 8. SQL compilation rules
+
+`backend/semantic/compiler.py` has two compilers under one validation model.
+
+### Metric compiler
+
+- resolves metrics to a dbt semantic model and physical relation;
+- applies metric-level filters inside aggregate expressions;
+- uses the semantic model's `agg_time_dimension` for time windows;
+- supports ratio formulas defined in Data Agent metadata;
+- emits a `GROUP BY` only for requested dimensions.
+
+For example, a filtered revenue metric compiles conceptually to:
+
+```sql
+SELECT
+  SUM(CASE WHEN status = 'Completed' THEN net_amount END) AS total_revenue
+FROM analytics_analytics.fact_orders
+WHERE order_date >= date_trunc('month', CURRENT_DATE) - interval '1 month'
+  AND order_date < date_trunc('month', CURRENT_DATE)
+LIMIT 1000
+```
+
+### Cross-model scalar metrics
+
+Cross-model detail joins are a common source of incorrect aggregates. For a
+scalar request such as revenue plus total stock, the compiler keeps each metric
+at its native grain:
+
+```sql
+WITH
+  m0 AS (... aggregate revenue from orders ...),
+  m1 AS (... aggregate stock from inventory ...)
+SELECT m0.total_revenue, m1.total_stock_quantity
+FROM m0
+CROSS JOIN m1
+```
+
+This is deliberate. Cross-model dimensions or filters require an explicit
+entity analysis plan rather than a guessed join.
+
+### Entity compiler
+
+- resolves a declared forward or reverse relationship path;
+- uses declared source/target join keys only;
+- reuses the source alias for denormalized relationships;
+- validates every selected and filtered property against its entity;
+- emits a bounded `LIMIT`.
+
+The legacy graph traversal engine remains for compatibility and unit coverage,
+but the API execution path uses the unified compiler.
+
+## 9. Runtime modules
+
+| Module | Responsibility |
+|---|---|
+| `backend/metadata/parser.py` | Reads dbt manifests and current source metadata |
+| `backend/ontology/parser.py` | Loads ontology objects, property mappings, and relationships |
+| `backend/semantic/registry.py` | Builds and validates the combined semantic contract |
+| `backend/semantic/query_plan.py` | Defines and validates typed plans |
+| `backend/agent/planner.py` | Converts router output or LLM JSON into a valid plan |
+| `backend/semantic/compiler.py` | Compiles metric and entity plans to SQL |
+| `backend/agent/orchestrator.py` | Streams classification, plan, SQL, result, and interpretation events |
+| `backend/sql/executor.py` | Enforces read-only transactions, timeout, and result limits |
+
+## 10. Safety model and current boundary
+
+Current safeguards include a typed plan, Registry allow-lists, read-only database
+connections, statement timeout, row limit, and a SQL keyword validator. They are
+appropriate for a controlled prototype, not sufficient for a production
+multi-tenant deployment.
+
+Production hardening should add:
+
+- AST-level SQL policy validation and parameter binding;
+- database roles, row-level security, identity, and audit logging;
+- query-cost budgets, concurrency controls, and rate limiting;
+- semantic artifact version checks and data freshness policy;
+- a business-domain golden set with automated evaluation in CI.
+
+## 11. Test strategy
+
+The suite is organized around contract boundaries:
+
+| Layer | Test focus |
+|---|---|
+| Registry | dbt/ontology alignment, property mappings, graph paths, drift rejection |
+| QueryPlan | schema validation, ambiguous/invalid paths, LLM JSON-only behavior |
+| Compiler | time dimensions, ratios, fan-out-safe scalar CTEs, relationship direction, denormalization |
+| Orchestrator | SSE emits a plan before SQL and supports planner fallback |
+| Database integration | compiled SQL executes against dbt-built PostgreSQL marts when opted in |
+
+Run hermetic tests with:
+
+```powershell
+.\venv\Scripts\python.exe -m pytest -p no:cacheprovider -q
+```
+
+Run PostgreSQL integration checks after `dbt build`:
+
+```powershell
+$env:RUN_DB_INTEGRATION = '1'
+.\venv\Scripts\python.exe -m pytest -p no:cacheprovider -m integration -q
+```
+
+## 12. Evolution path
+
+The next architectural milestones are not more prompting. They are semantic and
+operational capabilities: richer ontology constraints, ambiguity clarification,
+authorization-aware Registry views, AST/parameter-based SQL execution, artifact
+versioning, and evaluation over real business questions.

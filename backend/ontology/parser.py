@@ -16,6 +16,17 @@ class PropertyDef:
     name: str
     prop_type: str  # "String" | "Numeric" | "Date" | "Boolean"
     description: str
+    column: str | None = None
+
+    @property
+    def column_name(self) -> str:
+        """Physical column name used by the dbt relation.
+
+        Ontology property names are business-facing and may intentionally differ
+        from the physical dbt column name. Keeping that mapping here prevents the
+        ontology and the dbt model from drifting into separate sources of truth.
+        """
+        return self.column or self.name
 
 
 @dataclass
@@ -31,7 +42,14 @@ class ObjectType:
     properties: dict[str, PropertyDef] = field(default_factory=dict)
 
     def column_names(self) -> list[str]:
-        return [p.name for p in self.properties.values()]
+        return [p.column_name for p in self.properties.values()]
+
+    def column_for(self, property_name: str) -> str:
+        """Resolve a business property name to a validated physical column."""
+        try:
+            return self.properties[property_name].column_name
+        except KeyError as exc:
+            raise ValueError(f"Unknown property '{property_name}' for object '{self.name}'") from exc
 
 
 @dataclass
@@ -100,7 +118,12 @@ class OntologyStore:
                 "table": obj.table,
                 "primary_key": obj.primary_key,
                 "properties": [
-                    {"name": p.name, "type": p.prop_type, "description": p.description}
+                    {
+                        "name": p.name,
+                        "column": p.column_name,
+                        "type": p.prop_type,
+                        "description": p.description,
+                    }
                     for p in obj.properties.values()
                 ],
             })
@@ -147,6 +170,7 @@ def load_ontology() -> OntologyStore:
                 name=p["name"],
                 prop_type=p.get("type", "String"),
                 description=p.get("description", ""),
+                column=p.get("column"),
             )
 
         ot = ObjectType(

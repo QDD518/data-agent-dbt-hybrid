@@ -92,6 +92,13 @@ metrics:
       measure: avg_order_value
     filter: |
       status = 'Completed'
+    config:
+      meta:
+        data_agent:
+          formula:
+            kind: ratio
+            numerator_measure: revenue
+            denominator_measure: order_count
 
   - name: avg_discount_rate
     description: "Average discount percentage across orders"
@@ -161,6 +168,13 @@ metrics:
     type: simple
     type_params:
       measure: total_campaign_profit
+    config:
+      meta:
+        data_agent:
+          formula:
+            kind: ratio
+            numerator_measure: total_campaign_profit
+            denominator_measure: total_ad_spend
 
   - name: total_impressions
     description: "Total ad impressions across all campaigns"

@@ -52,6 +52,7 @@ object_types:
         type: String
         description: "Customer geographic region (denormalized)"
       - name: customer_city
+        column: city
         type: String
         description: "Customer city (denormalized)"
       - name: product_id

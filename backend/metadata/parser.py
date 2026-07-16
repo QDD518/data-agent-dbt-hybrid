@@ -2,6 +2,8 @@ import json
 from pathlib import Path
 from functools import lru_cache
 
+import yaml
+
 from backend.config import settings
 
 
@@ -88,6 +90,12 @@ def load_metadata() -> MetadataStore:
                 })
             store.columns_by_model[name] = columns
 
+    # A manifest only includes columns explicitly documented at the time of the
+    # last dbt parse. Merge the current model YAML so registry validation stays
+    # useful while a developer is iterating before the next parse. dbt remains
+    # the final authority because CI runs ``dbt build && dbt parse``.
+    _merge_declared_model_columns(store, project_dir)
+
     # ── semantic_manifest.json: semantic models, metrics ──
     semantic_path = target_dir / "semantic_manifest.json"
     if semantic_path.exists():
@@ -95,9 +103,47 @@ def load_metadata() -> MetadataStore:
         store.semantic_models = sm.get("semantic_models", [])
         store.metrics = sm.get("metrics", [])
 
+    _merge_declared_metrics(store, project_dir)
+
     return store
 
 
 def _load_json(path: Path) -> dict:
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
+
+
+def _merge_declared_model_columns(store: MetadataStore, project_dir: Path) -> None:
+    for yaml_path in project_dir.glob("models/**/*.yml"):
+        with open(yaml_path, "r", encoding="utf-8") as handle:
+            document = yaml.safe_load(handle) or {}
+        for model in document.get("models", []) or []:
+            model_name = model.get("name")
+            if not model_name or model_name not in store.model_by_name:
+                continue
+            existing = {column["name"] for column in store.columns_by_model.get(model_name, [])}
+            for column in model.get("columns", []) or []:
+                name = column.get("name")
+                if name and name not in existing:
+                    store.columns_by_model.setdefault(model_name, []).append({
+                        "name": name,
+                        "description": column.get("description", ""),
+                        "data_type": column.get("data_type", ""),
+                    })
+                    existing.add(name)
+
+
+def _merge_declared_metrics(store: MetadataStore, project_dir: Path) -> None:
+    """Overlay current source metadata so formula changes do not await a restart."""
+    by_name = {metric.get("name"): metric for metric in store.metrics}
+    for yaml_path in project_dir.glob("models/**/*.yml"):
+        with open(yaml_path, "r", encoding="utf-8") as handle:
+            document = yaml.safe_load(handle) or {}
+        for metric in document.get("metrics", []) or []:
+            current = by_name.get(metric.get("name"))
+            if current is None:
+                continue
+            # ``config.meta`` is where Data Agent extensions live. The dbt
+            # semantic manifest remains the source of type and measure details.
+            if metric.get("config"):
+                current["config"] = metric["config"]

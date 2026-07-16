@@ -26,7 +26,7 @@ _ROUTER_PROMPT = """You are an intent classifier for a Chat BI system. Analyze t
    - Example: "每个品类的销售额" → metric_query with total_revenue, dimensions=[product_category]
 
 2. **ontology_query** (Path D): The user asks about multiple business objects connected through relationships. Use this for cross-entity questions involving filters on related objects.
-   - Extract: start_object (str — one of the Object Type names), properties (list[str] — properties to display), filters (list of {{"property": "...", "op": "eq/gt/lt/in/like/...", "value": ...}} objects), time_range (str, optional)
+   - Extract: start_object (str — one of the Object Type names), target_objects (list[str], optional), properties (list[str] — properties to display), filters (list of {{"property": "...", "op": "eq/gt/lt/in/like/...", "value": ...}} objects), time_range (str, optional)
    - Example: "华北仓库中有哪些商品低于补货阈值？" → ontology_query, start_object=InventoryRecord, properties=["product_name","quantity_on_hand","warehouse_name"], filters=[{{"property":"warehouse_region","op":"eq","value":"North China"}},{{"property":"needs_reorder","op":"eq","value":true}}]
    - Example: "北京仓库库存不足的商品有哪些？" → ontology_query, start_object=InventoryRecord, filters=[{{"property":"warehouse_city","op":"eq","value":"Beijing"}}]
 
@@ -37,7 +37,7 @@ _ROUTER_PROMPT = """You are an intent classifier for a Chat BI system. Analyze t
    - Example: "revenue 指标是怎么计算的？", "订单表有哪些字段？"
 
 Output ONLY a JSON object. No markdown, no explanation:
-{{"path": "metric_query"|"ontology_query"|"exploratory"|"metadata", "metric_names": [...], "dimensions": [...], "start_object": "..."|null, "properties": [...], "filters": [...], "time_range": "..."|null}}
+{{"path": "metric_query"|"ontology_query"|"exploratory"|"metadata", "metric_names": [...], "dimensions": [...], "start_object": "..."|null, "target_objects": [...], "properties": [...], "filters": [...], "time_range": "..."|null}}
 """
 
 

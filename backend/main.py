@@ -18,12 +18,15 @@ async def lifespan(app: FastAPI):
     load_metadata()
     logger.info("Metadata loaded (%d models).", len(load_metadata().models))
 
-    # Load ontology
-    logger.info("Loading ontology...")
-    from backend.ontology.parser import load_ontology
-    onto = load_ontology()
-    logger.info("Ontology loaded (%d object types, %d link types).",
-                len(onto.object_by_name), len(onto.link_by_name))
+    # Build the canonical registry once at startup. This validates that dbt
+    # artifacts and ontology.yml describe the same physical data contract.
+    logger.info("Building semantic registry...")
+    from backend.semantic.registry import load_registry
+    registry = load_registry()
+    logger.info(
+        "Semantic registry loaded (%d metrics, %d entities, %d relationships).",
+        len(registry.metrics), len(registry.entities), len(registry.relationships),
+    )
 
     # RAG uses keyword-based retrieval (no embedding API dependency)
     logger.info("Server ready.")

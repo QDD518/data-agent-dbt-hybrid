@@ -106,6 +106,8 @@ models:
         description: "Current stock quantity"
       - name: reorder_point
         description: "Minimum stock level before reorder"
+      - name: last_restock_date
+        description: "Date of the most recent inventory replenishment"
       - name: needs_reorder
         description: "True if stock below reorder point"
       - name: is_out_of_stock
@@ -182,6 +184,8 @@ models:
       - name: customer_id
         description: "Customer identifier"
         tests: [unique, not_null]
+      - name: last_order_date
+        description: "Date of the customer's most recent completed order"
       - name: recency_days
         description: "Days since last purchase"
       - name: frequency
